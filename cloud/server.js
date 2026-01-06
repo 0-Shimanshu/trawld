@@ -3,8 +3,12 @@ import { WebSocketServer } from "ws";
 import fetch from "node-fetch";
 import semver from "semver";
 import { createClient } from "@supabase/supabase-js";
+import Redis from "ioredis";
 import path from "path";
 import { fileURLToPath } from "url";
+import dotenv from "dotenv";
+
+dotenv.config();
 
 const app = express();
 app.use(express.json({ limit: "2mb" }));
@@ -13,8 +17,18 @@ const PORT = process.env.PORT || 4000;
 const WS_PATH = "/agents";
 
 const SUPABASE_URL = process.env.SUPABASE_URL || "";
-const SUPABASE_KEY = process.env.SUPABASE_ANON_KEY || process.env.SUPABASE_SERVICE_KEY || "";
+const SUPABASE_KEY = process.env.SUPABASE_SERVICE_KEY || process.env.SUPABASE_ANON_KEY || "";
 const supabase = SUPABASE_URL && SUPABASE_KEY ? createClient(SUPABASE_URL, SUPABASE_KEY) : null;
+
+const REDIS_URL = process.env.REDIS_URL || "";
+const redis = REDIS_URL ? new Redis(REDIS_URL) : null;
+
+if (redis) {
+  redis.on("error", (err) => console.error("Redis Error:", err));
+  redis.on("connect", () => console.log("Connected to Redis"));
+} else {
+  console.log("Redis not configured");
+}
 
 const state = {
   machines: new Map(),
@@ -23,6 +37,24 @@ const state = {
   alerts: [],
   lastModifiedSeen: null
 };
+
+// Load initial state from Supabase if available
+async function loadState() {
+  if (supabase) {
+    const { data: machines } = await supabase.from("machines").select("*");
+    if (machines) {
+      machines.forEach(m => state.machines.set(m.id, m));
+      console.log(`Loaded ${machines.length} machines from Supabase`);
+    }
+    
+    // Load recent alerts
+    const { data: alerts } = await supabase.from("alerts").select("*").order("created_at", { ascending: false }).limit(100);
+    if (alerts) {
+      state.alerts = alerts;
+    }
+  }
+}
+loadState();
 
 async function notifyAll(message, payload) {
   const webhook = process.env.WEBHOOK_URL || "";
@@ -91,11 +123,13 @@ async function storeCVE(record) {
     for (const a of record.affected || []) {
       const eco = a.package?.ecosystem || "";
       const name = a.package?.name || "";
-      await supabase.from("cve_package_map").insert({
-        cve_id: record.id,
-        ecosystem: eco,
-        name
-      }).select().single().catch(() => {});
+      try {
+        await supabase.from("cve_package_map").insert({
+          cve_id: record.id,
+          ecosystem: eco,
+          name
+        });
+      } catch (e) {}
     }
   }
 }
