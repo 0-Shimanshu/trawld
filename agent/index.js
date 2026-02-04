@@ -105,13 +105,18 @@ function pipFreeze() {
 
 async function register(machineId) {
   const payload = { uuid: machineId, user_id: null, os: os.platform(), hostname: os.hostname() };
-  try {
-    await fetch(`${CLOUD_HTTP}/register`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(payload) });
-    logAction(`registered ${machineId}`);
-    return true;
-  } catch {
-    logAction(`register failed`);
-    return false;
+  let retries = 0;
+  while (true) {
+    try {
+      await fetch(`${CLOUD_HTTP}/register`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(payload) });
+      logAction(`registered ${machineId}`);
+      return true;
+    } catch (e) {
+      retries++;
+      const wait = Math.min(1000 * Math.pow(2, retries), 10000); // max 10s
+      logAction(`register failed (attempt ${retries}), retrying in ${wait}ms...`);
+      await new Promise(r => setTimeout(r, wait));
+    }
   }
 }
 
@@ -197,7 +202,23 @@ async function main() {
   // Connect WS
   function connectWs() {
     const ws = new WebSocket(`${CLOUD_WS}?machine_id=${machineId}`);
-    ws.on("open", () => logAction("WS Connected"));
+    let heartbeatTimer = null;
+
+    ws.on("open", () => {
+      logAction("WS Connected");
+      // Identify to Cloud so it can associate this socket with the machine
+      try {
+        ws.send(JSON.stringify({ type: "HELLO", machine_id: machineId }));
+      } catch {}
+      // Send periodic heartbeats so the Cloud can mark the machine as online
+      heartbeatTimer = setInterval(() => {
+        if (ws.readyState === ws.OPEN) {
+          try {
+            ws.send(JSON.stringify({ type: "HEARTBEAT" }));
+          } catch {}
+        }
+      }, 15000); // 15s
+    });
     ws.on("message", (data) => {
       try {
         const msg = JSON.parse(data);
@@ -223,8 +244,13 @@ async function main() {
         console.error("WS Error", e);
       }
     });
-    ws.on("close", () => setTimeout(connectWs, 5000));
-    ws.on("error", () => {});
+    ws.on("close", () => {
+      if (heartbeatTimer) clearInterval(heartbeatTimer);
+      setTimeout(connectWs, 5000);
+    });
+    ws.on("error", () => {
+      if (heartbeatTimer) clearInterval(heartbeatTimer);
+    });
   }
   connectWs();
 }
