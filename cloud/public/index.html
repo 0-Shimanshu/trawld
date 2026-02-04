@@ -1,114 +1,18 @@
 <!doctype html>
 <html lang="en">
 <head>
-  <meta charset="utf-8">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>VulnPkg | Security Command Center</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <link rel="stylesheet" href="style.css">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <script type="module" crossorigin src="/assets/index-Dc2ONM74.js"></script>
+  <link rel="stylesheet" crossorigin href="/assets/index--O9T1Kcy.css">
 </head>
 <body>
-  <div class="dashboard">
-    <aside class="sidebar">
-      <div class="brand">
-        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg>
-        VulnPkg Brain
-      </div>
-      <nav>
-        <a href="#" class="nav-item active">Dashboard</a>
-        <a href="#" class="nav-item">Machines</a>
-        <a href="#" class="nav-item">Alerts</a>
-        <a href="#" class="nav-item">Settings</a>
-      </nav>
-    </aside>
-
-    <main class="main-content">
-      <header class="header">
-        <h1>Overview</h1>
-        <div class="status-indicator">
-          <div class="dot"></div>
-          System Operational
-        </div>
-      </header>
-
-      <div class="stats-grid">
-        <div class="stat-card">
-          <div class="stat-title">Total Machines</div>
-          <div class="stat-value" id="stat-machines">0</div>
-        </div>
-        <div class="stat-card">
-          <div class="stat-title">Active Alerts</div>
-          <div class="stat-value" id="stat-alerts">0</div>
-        </div>
-        <div class="stat-card">
-          <div class="stat-title">Critical Vulnerabilities</div>
-          <div class="stat-value" id="stat-critical" style="color: var(--accent-red)">0</div>
-        </div>
-      </div>
-
-      <div class="section">
-        <div class="section-header">
-          <h2 class="section-title">Analytics</h2>
-        </div>
-        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 2rem; padding: 1.5rem;">
-          <div style="height: 300px;">
-            <canvas id="chart-severity"></canvas>
-          </div>
-          <div style="height: 300px;">
-            <canvas id="chart-ecosystem"></canvas>
-          </div>
-        </div>
-      </div>
-
-      <div class="section">
-        <div class="section-header">
-          <h2 class="section-title">Recent Alerts</h2>
-        </div>
-        <div class="table-container">
-          <table id="alerts">
-            <thead>
-              <tr>
-                <th>Severity</th>
-                <th>Package</th>
-                <th>CVE ID</th>
-                <th>Machine</th>
-                <th>Fix</th>
-                <th>Time</th>
-              </tr>
-            </thead>
-            <tbody>
-              <!-- Populated by JS -->
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      <div class="section">
-        <div class="section-header">
-          <h2 class="section-title">Registered Machines</h2>
-        </div>
-        <div class="table-container">
-          <table id="machines">
-            <thead>
-              <tr>
-                <th>Status</th>
-                <th>UUID</th>
-                <th>Hostname</th>
-                <th>OS</th>
-                <th>Last Seen</th>
-              </tr>
-            </thead>
-            <tbody>
-              <!-- Populated by JS -->
-            </tbody>
-          </table>
-        </div>
-      </div>
-    </main>
-  </div>
-  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-  <script src="client.js"></script>
+  <div id="root"></div>
 </body>
 </html>
+
