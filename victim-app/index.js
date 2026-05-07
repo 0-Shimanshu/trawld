@@ -1,4 +1,4 @@
-import "../runtime-node/index.js";
+import "@wahid7852/sentry-runtime-node";
 import _ from "lodash";
 
 console.log("Victim app started. PID:", process.pid);

@@ -1,8 +1,31 @@
 {
+  "cloud": {
+    "http": "https://your-sentry-cloud.vercel.app",
+    "ws": "",
+    "agentToken": ""
+  },
   "policy": {
     "critical": "kill",
     "high": "kill",
     "medium": "alert",
     "low": "log"
-  }
+  },
+  "watchRoots": [],
+  "ignorePatterns": [
+    "node_modules",
+    ".git",
+    ".next",
+    "dist",
+    "build",
+    "coverage",
+    ".venv",
+    "venv",
+    "__pycache__"
+  ],
+  "automation": {
+    "heartbeatIntervalMs": 15000,
+    "rescanIntervalMs": 300000,
+    "rescanOnStart": true
+  },
+  "monitoredProjects": []
 }

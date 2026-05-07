@@ -1,18 +1,38 @@
 {
-  "name": "local-agent",
+  "name": "@wahid7852/sentry-agent",
   "version": "0.1.0",
-  "private": true,
+  "description": "Global local agent for Sentry that discovers project manifests, exports package inventory, and connects machines to the cloud brain",
   "type": "module",
   "main": "index.js",
   "bin": {
-    "vuln-agent": "./index.js"
+    "sentry-agent": "./index.js"
   },
+  "homepage": "https://www.npmjs.com/package/@wahid7852/sentry-agent",
+  "bugs": {
+    "url": "https://github.com/Wahid7852/vuln-mitigate/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Wahid7852/vuln-mitigate.git",
+    "directory": "agent"
+  },
+  "license": "MIT",
+  "author": "Wahid7852",
+  "files": [
+    "index.js",
+    "README.md"
+  ],
   "scripts": {
     "start": "node index.js"
   },
+  "engines": {
+    "node": ">=18"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
   "dependencies": {
     "express": "^5.2.1",
-    "lodash": "^4.17.15",
     "node-fetch": "^3.3.2",
     "uuid": "^9.0.1",
     "ws": "^8.17.0"

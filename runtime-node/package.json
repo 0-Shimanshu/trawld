@@ -1,9 +1,49 @@
 {
-  "name": "vuln-hook-node",
+  "name": "@wahid7852/sentry-runtime-node",
   "version": "0.1.0",
+  "description": "Project-scoped runtime hook for Sentry Node.js applications that reports inventory to the local Sentry agent",
+  "keywords": [
+    "sentry",
+    "runtime-hook",
+    "supply-chain-security",
+    "dependency-scanning",
+    "nodejs"
+  ],
+  "homepage": "https://www.npmjs.com/package/@wahid7852/sentry-runtime-node",
+  "bugs": {
+    "url": "https://github.com/Wahid7852/vuln-mitigate/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Wahid7852/vuln-mitigate.git",
+    "directory": "runtime-node"
+  },
+  "license": "MIT",
+  "author": "Wahid7852",
+  "type": "module",
+  "exports": {
+    ".": {
+      "import": "./index.js",
+      "default": "./index.js"
+    }
+  },
   "main": "index.js",
+  "files": [
+    "index.js",
+    "README.md"
+  ],
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
   "dependencies": {
     "node-fetch": "^3.3.2"
   },
-  "type": "module"
+  "devDependencies": {},
+  "engines": {
+    "node": ">=18"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "sideEffects": true
 }

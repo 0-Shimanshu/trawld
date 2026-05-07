@@ -2,8 +2,7 @@ const { spawn } = require('child_process');
 const path = require('path');
 
 const commands = [
-  { name: 'BACKEND', cwd: 'cloud', cmd: 'npm', args: ['start'] },
-  { name: 'FRONTEND', cwd: 'cloud', cmd: 'npm', args: ['run', 'dev'] },
+  { name: 'CLOUD', cwd: 'cloud', cmd: 'npm', args: ['start'] },
   { name: 'AGENT', cwd: 'agent', cmd: 'npm', args: ['start'] }
 ];
 
