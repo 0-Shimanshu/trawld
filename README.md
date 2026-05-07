@@ -15,7 +15,6 @@ The product path is intentionally simple:
 - [Cloud Brain](cloud/README.md): hosted dashboard, REST API, Vercel deployment, open agent enrollment, heartbeat, and MongoDB persistence.
 - [Sentry Agent](agent/README.md): global npm package, setup wizard, watched roots, passive discovery, automation, and Windows startup.
 - [Runtime Node Hook](runtime-node/README.md): optional Node package for PID-aware app registration and runtime events.
-- [Victim App](victim-app/README.md): optional vulnerable sample app for local testing.
 
 ## Architecture
 
@@ -181,7 +180,6 @@ The Vercel dashboard uses polling plus heartbeat timestamps for online/offline s
 cloud/         Cloud Brain dashboard and API
 agent/         Global local agent package
 runtime-node/  Optional Node runtime hook package
-victim-app/    Optional vulnerable sample app
 start-all.js   Local development launcher
 ```
 

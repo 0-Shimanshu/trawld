@@ -10,15 +10,7 @@ Use this package when a Node app should report process-aware runtime data to the
 npm install @wahid7852/sentry-runtime-node
 ```
 
-For local repository testing, `victim-app` uses:
-
-```json
-{
-  "dependencies": {
-    "@wahid7852/sentry-runtime-node": "file:../runtime-node"
-  }
-}
-```
+For local repository testing, install the package from this folder into a private scratch app with `npm install <path-to-runtime-node>`.
 
 ## Usage
 

@@ -50,7 +50,7 @@ sentry-agent uninstall-service
 
 ## Config
 
-The config is root-based rather than demo-project based:
+The config is root-based rather than project-entry based:
 
 ```json
 {
