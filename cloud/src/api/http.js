@@ -12,7 +12,6 @@ async function parseJson(response) {
 
 export async function getJson(url) {
   const response = await fetch(url, {
-    credentials: 'include',
     headers: {
       accept: 'application/json'
     }
@@ -29,7 +28,6 @@ export async function getJson(url) {
 export async function postJson(url, body) {
   const response = await fetch(url, {
     method: 'POST',
-    credentials: 'include',
     headers: {
       'content-type': 'application/json',
       accept: 'application/json'

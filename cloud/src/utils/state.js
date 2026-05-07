@@ -3,7 +3,9 @@ export const EMPTY_STATE = {
   machines: [],
   projects: [],
   packages: [],
-  agents: []
+  agents: [],
+  state_version: 0,
+  last_updated: ''
 }
 
 export function normalizeState(next = {}) {
@@ -12,6 +14,8 @@ export function normalizeState(next = {}) {
     machines: next.machines || [],
     projects: next.projects || [],
     packages: next.packages || [],
-    agents: next.agents || []
+    agents: next.agents || [],
+    state_version: next.state_version || 0,
+    last_updated: next.last_updated || ''
   }
 }

@@ -24,14 +24,7 @@ const DATABASE_NAME = process.env.DATABASE_NAME || "sentry";
 const PUBLIC_DIR = path.join(__dirname, "public");
 const PUBLIC_INDEX = path.join(PUBLIC_DIR, "index.html");
 const PUBLIC_CLOUD_URL = process.env.PUBLIC_CLOUD_URL || `http://${HOST === "0.0.0.0" ? "localhost" : HOST}:${PORT}`;
-const ADMIN_PASSWORD = process.env.SENTRY_ADMIN_PASSWORD || "";
-const SESSION_SECRET = process.env.SENTRY_SESSION_SECRET || "";
-const AUTH_REQUIRED =
-  process.env.CLOUD_AUTH_REQUIRED === undefined
-    ? IS_VERCEL || HOST === "0.0.0.0"
-    : !["0", "false", "no", "off"].includes(String(process.env.CLOUD_AUTH_REQUIRED).toLowerCase());
-const SESSION_COOKIE = "sentry_session";
-const SESSION_TTL_MS = 12 * 60 * 60 * 1000;
+const OSV_QUERY_CACHE_TTL_MS = Number(process.env.OSV_QUERY_CACHE_TTL_MS || 24 * 60 * 60 * 1000);
 
 const app = express();
 app.use(express.json({ limit: "2mb" }));
@@ -52,79 +45,6 @@ function wantsHtml(req) {
   return req.method === "GET" && (req.headers.accept || "").includes("text/html");
 }
 
-function timingSafeEqualString(left, right) {
-  const leftBuffer = Buffer.from(String(left || ""));
-  const rightBuffer = Buffer.from(String(right || ""));
-  if (leftBuffer.length !== rightBuffer.length) return false;
-  return crypto.timingSafeEqual(leftBuffer, rightBuffer);
-}
-
-function parseCookies(header = "") {
-  return Object.fromEntries(
-    header
-      .split(";")
-      .map((entry) => entry.trim())
-      .filter(Boolean)
-      .map((entry) => {
-        const separator = entry.indexOf("=");
-        if (separator === -1) return [entry, ""];
-        return [decodeURIComponent(entry.slice(0, separator)), decodeURIComponent(entry.slice(separator + 1))];
-      })
-  );
-}
-
-function signSession(payload) {
-  const body = Buffer.from(JSON.stringify(payload)).toString("base64url");
-  const signature = crypto.createHmac("sha256", SESSION_SECRET || "dev-session-secret").update(body).digest("base64url");
-  return `${body}.${signature}`;
-}
-
-function verifySessionToken(token = "") {
-  const [body, signature] = String(token).split(".");
-  if (!body || !signature) return null;
-
-  const expected = crypto.createHmac("sha256", SESSION_SECRET || "dev-session-secret").update(body).digest("base64url");
-  if (!timingSafeEqualString(signature, expected)) return null;
-
-  try {
-    const payload = JSON.parse(Buffer.from(body, "base64url").toString("utf8"));
-    if (!payload.exp || payload.exp < Date.now()) return null;
-    return payload;
-  } catch {
-    return null;
-  }
-}
-
-function getSession(req) {
-  if (!AUTH_REQUIRED) return { user: "dev" };
-  const cookies = parseCookies(req.headers.cookie || "");
-  return verifySessionToken(cookies[SESSION_COOKIE]);
-}
-
-function setSessionCookie(req, res) {
-  const token = signSession({
-    user: "admin",
-    exp: Date.now() + SESSION_TTL_MS
-  });
-  const isSecure = req.secure || req.headers["x-forwarded-proto"] === "https";
-  res.setHeader(
-    "Set-Cookie",
-    `${SESSION_COOKIE}=${encodeURIComponent(token)}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${Math.floor(SESSION_TTL_MS / 1000)}${isSecure ? "; Secure" : ""}`
-  );
-}
-
-function clearSessionCookie(res) {
-  res.setHeader("Set-Cookie", `${SESSION_COOKIE}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0`);
-}
-
-function requireDashboardAuth(req, res, next) {
-  if (getSession(req)) {
-    next();
-    return;
-  }
-  res.status(401).json({ error: "authentication required" });
-}
-
 const state = {
   machines: new Map(),
   projects: new Map(),
@@ -137,7 +57,9 @@ const state = {
   enrolledAgents: new Map(),
   vulnCache: new Map(),
   packageQueryCache: new Map(),
-  lastModifiedSeen: null
+  lastModifiedSeen: null,
+  stateVersion: 1,
+  lastUpdated: new Date().toISOString()
 };
 
 async function connectDB() {
@@ -150,6 +72,7 @@ async function connectDB() {
     const client = new MongoClient(MONGODB_URI);
     await client.connect();
     db = client.db(DATABASE_NAME);
+    await ensureIndexes();
     console.log("Connected to MongoDB");
     return db;
   } catch (error) {
@@ -158,11 +81,43 @@ async function connectDB() {
   }
 }
 
+async function ensureIndexes() {
+  if (!db) return;
+  try {
+    await Promise.all([
+      db.collection("osv_query_cache").createIndex({ key: 1 }, { unique: true }),
+      db.collection("osv_query_cache").createIndex({ expires_at: 1 }, { expireAfterSeconds: 0 }),
+      db.collection("project_snapshots").createIndex({ machine_id: 1, project_id: 1, snapshot_hash: 1 })
+    ]);
+  } catch (error) {
+    console.error("Failed to ensure MongoDB indexes:", error.message);
+  }
+}
+
 async function ensureStateLoaded() {
   if (!stateLoadPromise) {
     stateLoadPromise = loadState();
   }
   return stateLoadPromise;
+}
+
+function markStateChanged() {
+  state.stateVersion += 1;
+  state.lastUpdated = new Date().toISOString();
+}
+
+function getStateMeta() {
+  return {
+    state_version: state.stateVersion,
+    last_updated: state.lastUpdated
+  };
+}
+
+function withStateMeta(payload = {}) {
+  return {
+    ...payload,
+    ...getStateMeta()
+  };
 }
 
 function createProjectId(machineId, projectRoot) {
@@ -400,11 +355,13 @@ function deriveState({ machineId = "", projectId = "" } = {}) {
     alerts,
     agents: Array.from(state.enrolledAgents.values())
       .filter((agent) => !machineId || agent.machine_id === machineId)
-      .map(sanitizeAgent)
+      .map(sanitizeAgent),
+    ...getStateMeta()
   };
 }
 
 function broadcastDashboard(message) {
+  markStateChanged();
   const payload = JSON.stringify(message);
   for (const socket of state.dashboardSockets) {
     if (socket.readyState === 1) {
@@ -477,8 +434,8 @@ async function queryOSVBatch(packages) {
 
   for (const pkg of packages) {
     const key = `${pkg.ecosystem}:${pkg.name}@${pkg.version}`;
-    const cached = state.packageQueryCache.get(key);
-    if (cached && Date.now() - cached.cachedAt < 5 * 60 * 1000) {
+    const cached = await getCachedOSVQuery(key);
+    if (cached) {
       freshResults.set(key, cached.vulns);
       continue;
     }
@@ -509,15 +466,66 @@ async function queryOSVBatch(packages) {
       const pkg = queryPackages[index];
       const key = `${pkg.ecosystem}:${pkg.name}@${pkg.version}`;
       const vulns = results[index]?.vulns || [];
-      state.packageQueryCache.set(key, {
-        vulns,
-        cachedAt: Date.now()
-      });
+      await storeOSVQueryCache(key, vulns);
       freshResults.set(key, vulns);
     }
   }
 
   return freshResults;
+}
+
+async function getCachedOSVQuery(key) {
+  const now = Date.now();
+  const cached = state.packageQueryCache.get(key);
+  if (cached && now - cached.cachedAt < OSV_QUERY_CACHE_TTL_MS) {
+    return cached;
+  }
+
+  if (!db) return null;
+
+  try {
+    const record = await db.collection("osv_query_cache").findOne({
+      key,
+      expires_at: { $gt: new Date() }
+    });
+    if (!record) return null;
+    const next = {
+      vulns: record.vulns || [],
+      cachedAt: new Date(record.cached_at || Date.now()).getTime()
+    };
+    state.packageQueryCache.set(key, next);
+    return next;
+  } catch (error) {
+    console.error("Failed to read OSV query cache:", error.message);
+    return null;
+  }
+}
+
+async function storeOSVQueryCache(key, vulns) {
+  const cachedAt = new Date();
+  const cacheRecord = {
+    vulns,
+    cachedAt: cachedAt.getTime()
+  };
+  state.packageQueryCache.set(key, cacheRecord);
+
+  if (!db) return;
+  try {
+    await db.collection("osv_query_cache").updateOne(
+      { key },
+      {
+        $set: {
+          key,
+          vulns,
+          cached_at: cachedAt,
+          expires_at: new Date(cachedAt.getTime() + OSV_QUERY_CACHE_TTL_MS)
+        }
+      },
+      { upsert: true }
+    );
+  } catch (error) {
+    console.error("Failed to persist OSV query cache:", error.message);
+  }
 }
 
 async function persistProjectState(projectId) {
@@ -867,6 +875,14 @@ async function ingestProjectInventory(payload) {
       .update(JSON.stringify({ projectRoot, packages: normalizedPackages }))
       .digest("hex");
 
+  if (previousSnapshot?.snapshot_hash === snapshotHash) {
+    return {
+      deduped: true,
+      project_id: projectId,
+      vulnerabilities_found: 0
+    };
+  }
+
   project.package_count = normalizedPackages.length;
   project.last_snapshot_hash = snapshotHash;
   state.projects.set(projectId, project);
@@ -884,14 +900,6 @@ async function ingestProjectInventory(payload) {
   broadcastDashboard({ type: "MACHINE_UPDATE", machine: buildMachineSummary(machineId) });
   broadcastDashboard({ type: "PROJECT_UPDATE", project: buildProjectSummary(projectId) });
   broadcastDashboard({ type: "INVENTORY_UPDATE", project_id: projectId, packages: buildProjectPackages(projectId) });
-
-  if (previousSnapshot?.snapshot_hash === snapshotHash) {
-    return {
-      deduped: true,
-      project_id: projectId,
-      vulnerabilities_found: 0
-    };
-  }
 
   const evaluation = await evaluateProjectSnapshot(projectId);
   broadcastDashboard({ type: "PROJECT_UPDATE", project: buildProjectSummary(projectId) });
@@ -937,6 +945,18 @@ async function loadState() {
     agents.forEach((agent) => {
       if (agent.machine_id) state.enrolledAgents.set(agent.machine_id, agent);
     });
+    const timestamps = [
+      ...machines.map((machine) => machine.last_seen || machine.updated_at),
+      ...projects.map((project) => project.last_seen || project.updated_at),
+      ...alerts.map((alert) => alert.updated_at || alert.created_at),
+      ...agents.map((agent) => agent.last_seen || agent.updated_at)
+    ]
+      .filter(Boolean)
+      .map((value) => new Date(value).getTime())
+      .filter(Number.isFinite);
+    if (timestamps.length > 0) {
+      state.lastUpdated = new Date(Math.max(...timestamps)).toISOString();
+    }
 
     console.log(
       `Loaded ${state.machines.size} machines, ${state.projects.size} projects, ${state.alerts.length} alerts, ${state.enrolledAgents.size} agents from MongoDB`
@@ -956,43 +976,14 @@ app.use(async (_req, res, next) => {
   }
 });
 
-app.post("/api/auth/login", (req, res) => {
-  if (!AUTH_REQUIRED) {
-    setSessionCookie(req, res);
-    res.json({ ok: true, user: { name: "dev" }, auth_required: false });
-    return;
-  }
-
-  const { password } = req.body || {};
-  if (!ADMIN_PASSWORD || !timingSafeEqualString(password, ADMIN_PASSWORD)) {
-    res.status(401).json({ error: "invalid password" });
-    return;
-  }
-
-  setSessionCookie(req, res);
-  res.json({ ok: true, user: { name: "admin" }, auth_required: true });
-});
-
-app.get("/api/auth/me", (req, res) => {
-  const session = getSession(req);
-  if (!session) {
-    res.status(401).json({ error: "authentication required", auth_required: AUTH_REQUIRED });
-    return;
-  }
-
-  res.json({
+app.get("/api/system/info", (_req, res) => {
+  res.json(withStateMeta({
     ok: true,
-    user: { name: session.user || "admin" },
-    auth_required: AUTH_REQUIRED,
     public_cloud_url: PUBLIC_CLOUD_URL,
     open_agent_enrollment: true,
-    realtime_mode: REALTIME_MODE
-  });
-});
-
-app.post("/api/auth/logout", (_req, res) => {
-  clearSessionCookie(res);
-  res.json({ ok: true });
+    realtime_mode: REALTIME_MODE,
+    osv_query_cache_ttl_ms: OSV_QUERY_CACHE_TTL_MS
+  }));
 });
 
 app.post("/api/agents/enroll", async (req, res) => {
@@ -1015,9 +1006,10 @@ app.post("/api/agents/enroll", async (req, res) => {
   });
 });
 
-app.get("/api/agents", requireDashboardAuth, (_req, res) => {
+app.get("/api/agents", (_req, res) => {
   res.json({
-    agents: Array.from(state.enrolledAgents.values()).map(sanitizeAgent)
+    agents: Array.from(state.enrolledAgents.values()).map(sanitizeAgent),
+    ...getStateMeta()
   });
 });
 
@@ -1046,7 +1038,7 @@ app.post("/api/agents/heartbeat", attachAgentSession, async (req, res) => {
   res.json({ ok: true, agent: sanitizeAgent(agent) });
 });
 
-app.post("/api/agents/:id/revoke", requireDashboardAuth, async (req, res) => {
+app.post("/api/agents/:id/revoke", async (req, res) => {
   const agent = state.enrolledAgents.get(req.params.id);
   if (!agent) {
     res.status(404).json({ error: "agent not found" });
@@ -1061,6 +1053,7 @@ app.post("/api/agents/:id/revoke", requireDashboardAuth, async (req, res) => {
   await persistAgent(next);
   const socket = state.agentSockets.get(agent.machine_id);
   if (socket && socket.readyState === 1) socket.close(1008, "agent revoked");
+  broadcastDashboard({ type: "AGENT_STATUS_UPDATE", agent: sanitizeAgent(next) });
   res.json({ ok: true, agent: sanitizeAgent(next) });
 });
 
@@ -1077,10 +1070,33 @@ app.post("/register", attachAgentSession, async (req, res) => {
   res.json({ ok: true });
 });
 
+async function ingestInventoryRequest(body = {}) {
+  const snapshots = Array.isArray(body.snapshots) ? body.snapshots : null;
+  if (!snapshots) {
+    return ingestProjectInventory(body);
+  }
+
+  const results = [];
+  for (const snapshot of snapshots) {
+    results.push(await ingestProjectInventory({
+      ...snapshot,
+      uuid: snapshot.uuid || body.uuid,
+      machine: snapshot.machine || body.machine
+    }));
+  }
+  return {
+    batch: true,
+    received: snapshots.length,
+    results,
+    deduped: results.filter((result) => result.deduped).length,
+    vulnerabilities_found: results.reduce((total, result) => total + (result.vulnerabilities_found || 0), 0)
+  };
+}
+
 app.post("/project-inventory", attachAgentSession, async (req, res) => {
   try {
-    const result = await ingestProjectInventory(req.body || {});
-    res.json({ ok: true, ...result });
+    const result = await ingestInventoryRequest(req.body || {});
+    res.json(withStateMeta({ ok: true, ...result }));
   } catch (error) {
     console.error("project-inventory failed:", error.message);
     res.status(400).json({ error: error.message });
@@ -1089,14 +1105,24 @@ app.post("/project-inventory", attachAgentSession, async (req, res) => {
 
 app.post("/inventory", attachAgentSession, async (req, res) => {
   try {
-    const result = await ingestProjectInventory(req.body || {});
-    res.json({ ok: true, ...result });
+    const result = await ingestInventoryRequest(req.body || {});
+    res.json(withStateMeta({ ok: true, ...result }));
   } catch (error) {
     res.status(400).json({ error: error.message });
   }
 });
 
-app.get("/state", requireDashboardAuth, (req, res) => {
+app.post("/project-inventory-batch", attachAgentSession, async (req, res) => {
+  try {
+    const result = await ingestInventoryRequest({ ...(req.body || {}), snapshots: req.body?.snapshots || [] });
+    res.json(withStateMeta({ ok: true, ...result }));
+  } catch (error) {
+    console.error("project-inventory-batch failed:", error.message);
+    res.status(400).json({ error: error.message });
+  }
+});
+
+app.get("/state", (req, res) => {
   const { machine_id: machineId = "", project_id: projectId = "" } = req.query || {};
   res.json(deriveState({ machineId, projectId }));
 });
@@ -1107,21 +1133,20 @@ app.get("/machines", (req, res) => {
     return;
   }
 
-  if (!getSession(req)) return res.status(401).json({ error: "authentication required" });
   const { machine_id: machineId = "" } = req.query || {};
-  res.json({ machines: deriveState({ machineId }).machines });
+  res.json(withStateMeta({ machines: deriveState({ machineId }).machines }));
 });
 
-app.get("/projects", requireDashboardAuth, (req, res) => {
+app.get("/projects", (req, res) => {
   const { machine_id: machineId = "", project_id: projectId = "" } = req.query || {};
-  res.json({ projects: deriveState({ machineId, projectId }).projects });
+  res.json(withStateMeta({ projects: deriveState({ machineId, projectId }).projects }));
 });
 
-app.get("/inventory", requireDashboardAuth, (req, res) => {
+app.get("/inventory", (req, res) => {
   const { machine_id: machineId = "", project_id: projectId = "" } = req.query || {};
-  res.json({
+  res.json(withStateMeta({
     packages: deriveState({ machineId, projectId }).packages
-  });
+  }));
 });
 
 app.get("/alerts", (req, res) => {
@@ -1130,16 +1155,15 @@ app.get("/alerts", (req, res) => {
     return;
   }
 
-  if (!getSession(req)) return res.status(401).json({ error: "authentication required" });
   const { machine_id: machineId = "", project_id: projectId = "", status = "" } = req.query || {};
   let alerts = deriveState({ machineId, projectId }).alerts;
   if (status) {
     alerts = alerts.filter((alert) => alert.status === status);
   }
-  res.json({ alerts });
+  res.json(withStateMeta({ alerts }));
 });
 
-app.post("/alerts/:id/ack", requireDashboardAuth, async (req, res) => {
+app.post("/alerts/:id/ack", async (req, res) => {
   const alert = state.alerts.find((candidate) => candidate.id === req.params.id);
   if (!alert) return res.status(404).json({ error: "alert not found" });
 
@@ -1155,7 +1179,7 @@ app.post("/alerts/:id/ack", requireDashboardAuth, async (req, res) => {
   res.json({ ok: true, alert });
 });
 
-app.post("/alerts/:id/remediate", requireDashboardAuth, async (req, res) => {
+app.post("/alerts/:id/remediate", async (req, res) => {
   const alert = state.alerts.find((candidate) => candidate.id === req.params.id);
   if (!alert) return res.status(404).json({ error: "alert not found" });
   if (!alert.fix) return res.status(400).json({ error: "no fix version is available for this alert" });
@@ -1179,7 +1203,7 @@ app.post("/alerts/:id/remediate", requireDashboardAuth, async (req, res) => {
   }
 });
 
-app.post("/scan-project/:id", requireDashboardAuth, async (req, res) => {
+app.post("/scan-project/:id", async (req, res) => {
   const projectId = req.params.id;
   if (!state.projects.has(projectId)) return res.status(404).json({ error: "project not found" });
   const result = await evaluateProjectSnapshot(projectId);
@@ -1188,7 +1212,7 @@ app.post("/scan-project/:id", requireDashboardAuth, async (req, res) => {
   res.json({ ok: true, vulnerabilities_found: result.vulnerabilitiesFound });
 });
 
-app.post("/scan-machine/:id", requireDashboardAuth, async (req, res) => {
+app.post("/scan-machine/:id", async (req, res) => {
   const machineId = req.params.id;
   const projectIds = Array.from(state.projects.values())
     .filter((project) => project.machine_id === machineId)
@@ -1206,7 +1230,7 @@ app.post("/scan-machine/:id", requireDashboardAuth, async (req, res) => {
   res.json({ ok: true, vulnerabilities_found: total });
 });
 
-app.post("/check-package", requireDashboardAuth, async (req, res) => {
+app.post("/check-package", async (req, res) => {
   const { ecosystem, name } = req.body || {};
   if (!ecosystem || !name) {
     return res.status(400).json({ error: "ecosystem and name required" });
@@ -1225,7 +1249,7 @@ app.post("/check-package", requireDashboardAuth, async (req, res) => {
   res.json({ ok: true, vulnerabilities_found: total });
 });
 
-app.post("/verify-remediation", requireDashboardAuth, async (_req, res) => {
+app.post("/verify-remediation", async (_req, res) => {
   let updated = 0;
   for (const alert of state.alerts.filter((candidate) => !candidate.fix)) {
     try {
@@ -1297,7 +1321,7 @@ async function ingestModifiedCSV() {
   }
 }
 
-app.post("/ingest-now", requireDashboardAuth, async (_req, res) => {
+app.post("/ingest-now", async (_req, res) => {
   const result = await ingestModifiedCSV();
   if (result.error) return res.status(500).json(result);
   broadcastDashboard({ type: "STATE_SYNC", state: deriveState() });
@@ -1319,12 +1343,6 @@ app.get("*", (req, res, next) => {
   res.sendFile(PUBLIC_INDEX);
 });
 
-if (AUTH_REQUIRED && (!ADMIN_PASSWORD || !SESSION_SECRET)) {
-  throw new Error(
-    "Cloud auth is required, but SENTRY_ADMIN_PASSWORD and SENTRY_SESSION_SECRET are not both configured"
-  );
-}
-
 function attachWebSocketServer(server) {
   const wss = new WebSocketServer({ noServer: true });
   server.on("upgrade", (req, socket, head) => {
@@ -1342,24 +1360,24 @@ function attachWebSocketServer(server) {
   const url = new URL(req.url || WS_PATH, `http://${req.headers.host || "localhost"}`);
   let role = url.searchParams.get("role") || "dashboard";
   let machineId = url.searchParams.get("machine_id") || "";
-  let authedAgent = null;
+  let agentSession = null;
 
   if (role === "agent" || machineId) {
     role = "agent";
-    authedAgent = await resolveAgentSession(machineId);
-    if (!authedAgent) {
+    agentSession = await resolveAgentSession(machineId);
+    if (!agentSession) {
       ws.close(1008, "agent revoked or unknown");
       return;
     }
     state.agentSockets.set(machineId, ws);
     const machine = upsertMachine(machineId, {
-      hostname: authedAgent.hostname,
-      os: authedAgent.os
+      hostname: agentSession.hostname,
+      os: agentSession.os
     });
     await persistMachine(machine);
     await updateAgentRealtimeStatus(machineId, {
-      hostname: authedAgent.hostname,
-      os: authedAgent.os,
+      hostname: agentSession.hostname,
+      os: agentSession.os,
       status: {
         ws_connected: true,
         connected_at: new Date().toISOString()
@@ -1367,11 +1385,6 @@ function attachWebSocketServer(server) {
     });
     broadcastDashboard({ type: "MACHINE_UPDATE", machine: buildMachineSummary(machineId) });
   } else {
-    const session = getSession(req);
-    if (!session) {
-      ws.close(1008, "dashboard authentication required");
-      return;
-    }
     role = "dashboard";
     state.dashboardSockets.add(ws);
     ws.send(JSON.stringify({ type: "STATE_SYNC", state: deriveState() }));
@@ -1437,7 +1450,7 @@ function startStandaloneServer() {
   const server = app.listen(PORT, HOST, async () => {
     await ensureStateLoaded();
     console.log(`Cloud CVE Brain listening on http://${HOST}:${PORT}`);
-    console.log(`Cloud auth ${AUTH_REQUIRED ? "enabled" : "disabled"}`);
+    console.log("Cloud Brain open mode enabled");
     console.log(`Realtime mode ${REALTIME_MODE}`);
   });
 

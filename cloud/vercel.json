@@ -8,7 +8,7 @@
       "dest": "/api/index.js"
     },
     {
-      "src": "/(state|machines|projects|inventory|alerts|register|project-inventory|inventory|scan-machine/.*|scan-project/.*|check-package|verify-remediation|ingest-now)(.*)",
+      "src": "/(state|machines|projects|inventory|alerts|register|project-inventory|project-inventory-batch|inventory|scan-machine/.*|scan-project/.*|check-package|verify-remediation|ingest-now)(.*)",
       "dest": "/api/index.js"
     },
     {

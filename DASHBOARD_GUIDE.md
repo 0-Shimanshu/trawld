@@ -11,10 +11,10 @@ Start here:
 ## Current Dashboard Model
 
 - Route-based React app with pages for `/`, `/machines`, `/machines/:machineId`, `/alerts`, `/packages`, and `/analytics`.
-- Authenticated dashboard session through `POST /api/auth/login`.
+- Open dashboard access with no login/session step.
 - Endpoint-specific reads from `/machines`, `/projects`, `/inventory`, and `/alerts`.
 - Global shell with refresh, sync actions, compact fleet counters, and realtime status.
-- Vercel-compatible realtime through HTTP heartbeats plus polling.
+- Vercel-compatible realtime through HTTP heartbeats plus adaptive state-version polling.
 - Optional WebSocket realtime for self-hosted long-running Express mode.
 
-For deployment, authentication, enrollment, and API details, use [cloud/README.md](cloud/README.md).
+For deployment, enrollment, and API details, use [cloud/README.md](cloud/README.md).

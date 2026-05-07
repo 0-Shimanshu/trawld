@@ -25,7 +25,7 @@ flowchart LR
   Agent -->|"POST /api/agents/enroll with machine metadata"| Cloud
   Cloud -->|"random agent session id"| Agent
   Agent -->|"machine, projects, inventory, heartbeats"| Cloud
-  Dashboard["Browser dashboard"] -->|"HTTP-only session cookie"| Cloud
+  Dashboard["Browser dashboard"] -->|"open dashboard/API requests"| Cloud
   App["Optional Node app"] -->|"local HTTP registration"| Agent
   Hook["@wahid7852/sentry-runtime-node"] --> App
 ```
@@ -77,8 +77,6 @@ The hook talks to the local agent, not directly to the Cloud Brain.
 MONGODB_URI=mongodb+srv://...
 DATABASE_NAME=sentry
 PUBLIC_CLOUD_URL=https://your-sentry-cloud.vercel.app
-SENTRY_ADMIN_PASSWORD=<long admin password>
-SENTRY_SESSION_SECRET=<long random session secret>
 ```
 
 4. Replace the placeholder hosted URL in the agent defaults before publishing:
@@ -135,7 +133,7 @@ Start the Cloud Brain locally:
 
 ```bash
 cd cloud
-CLOUD_AUTH_REQUIRED=false npm start
+npm start
 ```
 
 Start the agent locally:
@@ -160,19 +158,21 @@ The agent runs several automatic loops after setup:
 - Startup scan of watched roots.
 - Manifest-change rescans for supported project files.
 - Scheduled rescans every five minutes by default.
-- HTTP heartbeats every fifteen seconds by default.
+- HTTP heartbeats every fifteen seconds by default, with jitter so agents do not all report at once.
 - Optional local runtime registrations from Node apps that import the runtime hook.
+- Batch inventory upload for root scans.
+- Snapshot-hash dedupe so unchanged projects do not re-upload or re-trigger OSV evaluation.
 
-The Vercel dashboard uses polling plus heartbeat timestamps for online/offline state. A machine is considered online when recent authenticated heartbeats are received.
+The Vercel dashboard uses adaptive polling plus heartbeat timestamps for online/offline state. A machine is considered online when recent heartbeats are received.
 
-## Security Defaults
+## Open Deployment Notes
 
-- Public Cloud Brain deployments should require `SENTRY_ADMIN_PASSWORD` and `SENTRY_SESSION_SECRET` for dashboard access.
-- Dashboard access uses an HTTP-only session cookie.
+- The Cloud Brain and dashboard are intentionally open to anyone with the URL.
 - Agent ingestion is open by machine id in v1. Treat public Cloud Brain URLs as writable ingestion endpoints.
 - Package install does not auto-start services in `postinstall`.
 - Users explicitly choose watched folders. The agent avoids whole-disk scanning in v1.
 - Runtime integration does not silently edit app entry files.
+- Use reverse-proxy controls, private networking, or IP allowlists if you want deployment-level access control later.
 
 ## Repository Layout
 

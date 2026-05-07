@@ -1,21 +1,20 @@
-# Dashboard Authentication Notes
+# Future Access Control Notes
 
-The current v1 Cloud Brain uses a single-admin dashboard login plus open agent enrollment. It is not a full multi-tenant user-management system yet.
+The current v1 Cloud Brain is intentionally open: no dashboard users, no admin password, no session cookies, and no enrollment token.
 
-Current auth model:
+Current model:
 
-- `SENTRY_ADMIN_PASSWORD` protects dashboard login.
-- `SENTRY_SESSION_SECRET` signs HTTP-only dashboard sessions.
-- Agents can register machine sessions without a shared enrollment token.
-- Ingestion and heartbeat APIs are open by machine id in v1.
+- Anyone with the Cloud Brain URL can view dashboard data.
+- Agents register machine sessions without a shared enrollment token.
+- Ingestion and heartbeat APIs are open by machine id.
+- Machine revocation blocks a known machine id from continuing to report.
 
-Planned multi-tenant features can build on this foundation:
+Future access-control options can build on this foundation:
 
-- Multiple dashboard users.
-- Organization/team scoping.
-- Role-based permissions.
-- Audit logs.
+- Reverse-proxy IP allowlists.
+- Private networking or VPN-only deployments.
 - Per-team enrollment links or invite tokens.
-- Token expiry and rotation workflows.
+- Multiple dashboard users and organization scoping.
+- Audit logs and role-based permissions.
 
 For the current deployed contract, see [README.md](../README.md) and [cloud/README.md](README.md).

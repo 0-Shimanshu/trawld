@@ -1,5 +1,5 @@
-export default function AgentOnboarding({ session }) {
-  const cloudUrl = session?.public_cloud_url || window.location.origin
+export default function AgentOnboarding({ systemInfo }) {
+  const cloudUrl = systemInfo?.public_cloud_url || window.location.origin
   const wsUrl = cloudUrl.replace(/^http/i, 'ws').replace(/\/$/, '') + '/agents'
 
   return (

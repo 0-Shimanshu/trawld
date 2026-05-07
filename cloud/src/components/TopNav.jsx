@@ -14,8 +14,7 @@ export default function TopNav({
   summaryLoading,
   onRefresh,
   onIngestNow,
-  ingesting,
-  onLogout
+  ingesting
 }) {
   const location = useLocation()
   const alertsCount = (summary.alerts || []).filter((alert) => alert.status !== 'ack').length
@@ -99,10 +98,6 @@ export default function TopNav({
             >
               <i className={`fas ${ingesting ? 'fa-spinner fa-spin' : 'fa-bolt'} text-xs`}></i>
               <span>{ingesting ? 'Syncing OSV' : 'Sync OSV'}</span>
-            </button>
-            <button onClick={onLogout} className="btn-secondary !px-4 !py-3" title="Sign out">
-              <i className="fas fa-right-from-bracket text-xs"></i>
-              <span>Logout</span>
             </button>
           </div>
         </div>

@@ -5,7 +5,7 @@ import useAppShell from '../hooks/useAppShell'
 import useOverviewData from '../hooks/useOverviewData'
 
 export default function OverviewPage() {
-  const { refreshToken, requestRefresh, session } = useAppShell()
+  const { refreshToken, requestRefresh, systemInfo } = useAppShell()
   const { data, loading } = useOverviewData(refreshToken)
 
   const handleScanAll = async () => {
@@ -19,7 +19,7 @@ export default function OverviewPage() {
 
   return (
     <div className="space-y-8">
-      <AgentOnboarding session={session} />
+      <AgentOnboarding systemInfo={systemInfo} />
       <MasterDashboard data={data} loading={loading} onScanAll={handleScanAll} />
     </div>
   )

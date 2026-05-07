@@ -1,15 +1,15 @@
 # Cloud Brain
 
-Cloud Brain is the hosted control plane for Sentry. It serves the React dashboard, exposes the authenticated REST API, enrolls agents, stores machine/project/package inventory, and shows heartbeat-backed machine status.
+Cloud Brain is the open coordination service for Sentry. It serves the React dashboard, accepts agent telemetry, stores machine/project/package inventory, queries OSV, and shows heartbeat-backed machine status from the same frontend/backend deployment.
 
 ## Responsibilities
 
-- Dashboard login and HTTP-only session handling.
+- Open dashboard and REST APIs with no admin login.
 - Open agent enrollment without a shared enrollment token.
 - Machine, inventory, and heartbeat ingestion by machine id.
-- Machine, project, package, and alert APIs.
-- MongoDB persistence in production.
-- Vercel-compatible HTTP realtime through agent heartbeats and dashboard polling.
+- Snapshot dedupe using `machine_id`, `project_id`, and `snapshot_hash`.
+- MongoDB persistence for machines, projects, packages, alerts, agents, snapshots, CVEs, and OSV package-query cache.
+- Vercel-compatible realtime through agent heartbeats plus adaptive dashboard polling.
 - Optional WebSocket realtime when self-hosted as a long-running Express server.
 
 ## Deploying to Vercel
@@ -22,30 +22,23 @@ Required Vercel environment variables:
 MONGODB_URI=mongodb+srv://...
 DATABASE_NAME=sentry
 PUBLIC_CLOUD_URL=https://your-sentry-cloud.vercel.app
-SENTRY_ADMIN_PASSWORD=<long admin password>
-SENTRY_SESSION_SECRET=<long random session secret>
 ```
 
-Recommended:
+Optional:
 
 ```bash
-CLOUD_AUTH_REQUIRED=true
+OSV_QUERY_CACHE_TTL_MS=86400000
+REALTIME_MODE=http
 ```
 
-Vercel serves:
-
-- Static dashboard assets from `cloud/public`.
-- API routes through `cloud/api/index.js`.
-- SPA fallback for route-based dashboard navigation.
-
-Important: replace `https://your-sentry-cloud.vercel.app` in package defaults before publishing the npm packages.
+Vercel serves static dashboard assets from `cloud/public`, API routes through `cloud/api/index.js`, and SPA fallback for route-based navigation. Replace `https://your-sentry-cloud.vercel.app` in package defaults before publishing npm packages.
 
 ## Local Development
 
 ```bash
 npm install
 npm run build
-CLOUD_AUTH_REQUIRED=false npm start
+npm start
 ```
 
 Dashboard:
@@ -60,23 +53,9 @@ For public self-hosted testing on your LAN or VPS:
 HOST=0.0.0.0 PORT=4000 PUBLIC_CLOUD_URL=http://<static-ip>:4000 npm start
 ```
 
-For real public exposure, put HTTPS in front with Caddy, Nginx, Cloudflare Tunnel, or a similar reverse proxy and set `PUBLIC_CLOUD_URL` to the HTTPS URL.
+For HTTPS, put Caddy, Nginx, Cloudflare Tunnel, or another reverse proxy in front and set `PUBLIC_CLOUD_URL` to the public URL.
 
-## Authentication
-
-Dashboard users authenticate with:
-
-```http
-POST /api/auth/login
-GET /api/auth/me
-POST /api/auth/logout
-```
-
-The dashboard uses an HTTP-only session cookie. Protected dashboard APIs return `401` when unauthenticated.
-
-Agent ingestion is open in v1. Agents identify themselves with machine metadata and a random session id returned during enrollment, but the Cloud Brain does not require bearer authorization for inventory or heartbeat uploads.
-
-## Enrollment
+## Agent Enrollment
 
 Endpoint:
 
@@ -88,12 +67,9 @@ Request:
 
 ```json
 {
-  "machine": {
-    "machine_id": "generated-machine-id",
-    "hostname": "DESKTOP-123",
-    "os": "win32",
-    "arch": "x64"
-  },
+  "machine_id": "generated-machine-id",
+  "hostname": "DESKTOP-123",
+  "os": "win32",
   "label": "Wahid laptop"
 }
 ```
@@ -113,60 +89,47 @@ Response:
 
 The session id is a local correlation value, not an authorization secret.
 
-## Agent APIs
+## Public APIs
 
-Agent-facing endpoints accept machine metadata directly:
+Agent-facing endpoints:
 
 ```http
 POST /register
 POST /project-inventory
+POST /project-inventory-batch
+POST /inventory
 POST /api/agents/heartbeat
+GET /api/agents/me?machine_id=<id>
 ```
 
-Dashboard-facing agent administration requires dashboard session auth:
+Dashboard/system endpoints:
 
 ```http
+GET /api/system/info
 GET /api/agents
-GET /api/agents/me
 POST /api/agents/:id/revoke
-```
-
-## Dashboard APIs
-
-Protected dashboard reads:
-
-```http
 GET /state
 GET /machines
 GET /projects
 GET /inventory
 GET /alerts
-```
-
-Protected dashboard mutations:
-
-```http
 POST /alerts/:id/ack
 POST /alerts/:id/remediate
 POST /scan-machine/:id
+POST /scan-project/:id
 POST /ingest-now
 ```
 
-The React app consumes endpoint-specific API modules instead of relying on `/state` as the main page data source. `/state` remains available for compatibility and fallback hydration.
+Responses include `state_version` and `last_updated` where useful. The dashboard polls `/api/system/info` and refreshes heavier datasets only when the state version changes.
 
-## Realtime Model
+## Performance Model
 
-Vercel v1:
-
-- Agents send `POST /api/agents/heartbeat` every fifteen seconds by default.
-- Dashboard pages poll/refresh to show current data.
-- Machine online/offline state is derived from recent authenticated heartbeat timestamps.
-
-Self-hosted long-running server:
-
-- WebSockets can be enabled for dashboard/agent realtime.
-- Agent WebSocket connections require `role=agent` and `machine_id`.
-- Dashboard WebSocket connections require a valid session cookie.
+- Agents skip unchanged project snapshots locally when the hash has not changed.
+- Root discovery uploads changed project snapshots in batches.
+- Cloud Brain ignores repeated snapshots with the same project hash before OSV evaluation.
+- OSV package query results are cached in memory and persisted to MongoDB with a TTL.
+- Heartbeats include jitter to prevent many agents from reporting at exactly the same interval.
+- Vercel mode uses adaptive polling: faster after changes, slower when idle.
 
 ## Build and Verify
 
@@ -177,10 +140,9 @@ node --check api/index.js
 npm audit
 ```
 
-## Security Notes
+## Open Deployment Notes
 
-- Do not disable auth on public deployments.
-- Use a long random value for `SENTRY_SESSION_SECRET`.
-- Store MongoDB credentials only in Vercel/environment config.
-- Revoke a machine id if a machine is lost, retired, or compromised.
-- Because ingestion is open, any client that can reach the API can submit machine/package data. Use reverse-proxy controls, IP allowlists, or reintroduce enrollment tokens if abuse becomes a concern.
+- Anyone with the URL can view dashboard data and submit telemetry.
+- Hostnames, OS names, project paths, and package inventories should be treated as public to that deployment.
+- Use reverse-proxy controls, private networking, or IP allowlists if you need access restrictions later.
+- Revoke a machine id if a machine is lost, retired, or should stop reporting.

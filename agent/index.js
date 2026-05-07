@@ -629,6 +629,7 @@ async function discoverProjectsUnderRoot(rootPath, options = {}) {
 
   const queue = [resolvedRoot];
   let discovered = 0;
+  const discoveredSnapshots = [];
 
   while (queue.length > 0) {
     const current = queue.shift();
@@ -647,7 +648,7 @@ async function discoverProjectsUnderRoot(rootPath, options = {}) {
       });
 
       if (snapshot) {
-        await ingestProjectSnapshot(snapshot, { force: options.force === true });
+        discoveredSnapshots.push(snapshot);
         discovered += 1;
       }
     }
@@ -657,6 +658,10 @@ async function discoverProjectsUnderRoot(rootPath, options = {}) {
       if (ignorePatterns.includes(entry.name)) continue;
       queue.push(path.join(current, entry.name));
     }
+  }
+
+  if (discoveredSnapshots.length > 0) {
+    await ingestProjectSnapshotsBatch(discoveredSnapshots, { force: options.force === true });
   }
 
   logAction(`root discovery complete root=${resolvedRoot} projects=${discovered}`);
@@ -897,6 +902,48 @@ async function sendProjectInventory(snapshot) {
   }
 }
 
+async function sendProjectInventoryBatch(snapshots) {
+  if (!Array.isArray(snapshots) || snapshots.length === 0) return { ok: true, skipped: true };
+  if (snapshots.length === 1) return sendProjectInventory(snapshots[0]);
+
+  const cloud = getCloudConfig();
+  const payload = {
+    uuid: state.machineId,
+    machine: {
+      uuid: state.machineId,
+      hostname: os.hostname(),
+      os: os.platform()
+    },
+    snapshots: snapshots.map((snapshot) => ({
+      source: snapshot.source,
+      observed_at: snapshot.observedAt,
+      snapshot_hash: snapshot.snapshotHash,
+      process: snapshot.process || null,
+      project: snapshot.project,
+      packages: snapshot.packages
+    }))
+  };
+
+  try {
+    const response = await fetch(`${cloud.http}/project-inventory-batch`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(payload)
+    });
+    if (!response.ok) {
+      const body = await response.json().catch(() => ({}));
+      throw new Error(body.error || `cloud returned ${response.status}`);
+    }
+    const result = await response.json().catch(() => ({}));
+    state.lastExportAt = new Date().toISOString();
+    logAction(`project inventory batch sent snapshots=${snapshots.length} deduped=${result.deduped || 0}`);
+    return result;
+  } catch (error) {
+    logAction(`project inventory batch failed snapshots=${snapshots.length} message=${error.message}`);
+    return { ok: false, error: error.message };
+  }
+}
+
 function getAlertCacheKey(pkg) {
   return `${pkg.ecosystem}:${pkg.name}@${pkg.version}`;
 }
@@ -991,6 +1038,44 @@ async function ingestProjectSnapshot(snapshot, options = {}) {
     ok: true,
     deduped: false,
     project_id: snapshot.project.id
+  };
+}
+
+async function ingestProjectSnapshotsBatch(snapshots, options = {}) {
+  const changed = [];
+  const results = [];
+
+  for (const snapshot of snapshots) {
+    const previous = state.projects.get(snapshot.project.id);
+    upsertProjectRecord(snapshot);
+    state.projectPackages.set(snapshot.project.id, snapshot.packages);
+
+    if (snapshot.pid) {
+      rememberManagedProcess(snapshot);
+    }
+
+    ensureProjectWatcher(snapshot.project);
+
+    if (!options.force && previous?.last_snapshot_hash === snapshot.snapshotHash) {
+      logAction(`snapshot deduped project=${snapshot.project.label} source=${snapshot.source}`);
+      results.push({ ok: true, deduped: true, project_id: snapshot.project.id });
+      continue;
+    }
+
+    changed.push(snapshot);
+    results.push({ ok: true, deduped: false, project_id: snapshot.project.id });
+  }
+
+  if (changed.length > 0) {
+    await sendProjectInventoryBatch(changed);
+  }
+
+  return {
+    ok: true,
+    total: snapshots.length,
+    changed: changed.length,
+    deduped: snapshots.length - changed.length,
+    results
   };
 }
 
@@ -1349,6 +1434,12 @@ function redactCloudConfig(cloud = {}) {
 
 function getAutomationConfig() {
   return readConfig().automation || DEFAULT_AUTOMATION;
+}
+
+function withJitter(ms, ratio = 0.2) {
+  const base = Number(ms) || 0;
+  const spread = Math.max(0, base * ratio);
+  return Math.max(1000, Math.round(base - spread + Math.random() * spread * 2));
 }
 
 function buildAgentStatusPayload() {
@@ -1818,10 +1909,16 @@ function startHttpHeartbeatLoop() {
     });
   };
 
-  setTimeout(send, 1000);
+  setTimeout(send, withJitter(1000, 0.8));
   if (automation.heartbeatIntervalMs > 0) {
-    setInterval(send, automation.heartbeatIntervalMs);
-    logAction(`http heartbeat scheduled interval=${automation.heartbeatIntervalMs}ms`);
+    const scheduleNext = () => {
+      setTimeout(() => {
+        send();
+        scheduleNext();
+      }, withJitter(automation.heartbeatIntervalMs));
+    };
+    scheduleNext();
+    logAction(`http heartbeat scheduled interval=${automation.heartbeatIntervalMs}ms jitter=20%`);
   }
 }
 

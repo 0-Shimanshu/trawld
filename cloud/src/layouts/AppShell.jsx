@@ -1,37 +1,77 @@
 import { startTransition, useEffect, useEffectEvent, useMemo, useRef, useState } from 'react'
 import { Outlet } from 'react-router-dom'
-import { logout } from '../api/auth'
 import TopNav from '../components/TopNav'
 import useFleetSummary from '../hooks/useFleetSummary'
-import { ingestNow } from '../api/system'
+import { getSystemInfo, ingestNow } from '../api/system'
 import { normalizeState } from '../utils/state'
 
-export default function AppShell({ session, onLogout }) {
+const DEFAULT_SYSTEM_INFO = {
+  public_cloud_url: window.location.origin,
+  realtime_mode: 'http',
+  open_agent_enrollment: true,
+  state_version: 0,
+  last_updated: ''
+}
+
+export default function AppShell() {
   const [refreshToken, setRefreshToken] = useState(0)
   const [wsConnected, setWsConnected] = useState(false)
   const [ingesting, setIngesting] = useState(false)
+  const [systemInfo, setSystemInfo] = useState(DEFAULT_SYSTEM_INFO)
   const socketRef = useRef(null)
   const reconnectRef = useRef(null)
   const pollRef = useRef(null)
+  const idlePollsRef = useRef(0)
   const { data: summary, loading: summaryLoading, setData: setSummary } = useFleetSummary(refreshToken)
 
   const requestRefresh = useEffectEvent(() => {
     setRefreshToken((current) => current + 1)
   })
 
+  const pollSystemInfo = useEffectEvent(async () => {
+    try {
+      const next = await getSystemInfo()
+      setSystemInfo((current) => {
+        if ((next.state_version || 0) > (current.state_version || 0)) {
+          idlePollsRef.current = 0
+          startTransition(() => requestRefresh())
+        } else {
+          idlePollsRef.current += 1
+        }
+        return { ...current, ...next }
+      })
+    } catch (error) {
+      console.error('System info polling failed:', error)
+      idlePollsRef.current += 1
+    }
+  })
+
+  useEffect(() => {
+    getSystemInfo()
+      .then((next) => setSystemInfo((current) => ({ ...current, ...next })))
+      .catch((error) => console.error('Failed to load system info:', error))
+  }, [])
+
   useEffect(() => {
     let isDisposed = false
-    const useWebSocket = session?.realtime_mode !== 'http'
+    const useWebSocket = systemInfo.realtime_mode !== 'http'
 
     if (!useWebSocket) {
       setWsConnected(true)
-      pollRef.current = setInterval(() => {
-        if (!isDisposed) requestRefresh()
-      }, 15000)
+      const schedulePoll = () => {
+        const intervalMs = idlePollsRef.current >= 6 ? 30000 : idlePollsRef.current >= 2 ? 15000 : 5000
+        pollRef.current = setTimeout(async () => {
+          if (!isDisposed) {
+            await pollSystemInfo()
+            schedulePoll()
+          }
+        }, intervalMs)
+      }
+      schedulePoll()
 
       return () => {
         isDisposed = true
-        if (pollRef.current) clearInterval(pollRef.current)
+        if (pollRef.current) clearTimeout(pollRef.current)
       }
     }
 
@@ -84,7 +124,17 @@ export default function AppShell({ session, onLogout }) {
       if (reconnectRef.current) clearTimeout(reconnectRef.current)
       if (socketRef.current) socketRef.current.close()
     }
-  }, [session?.realtime_mode])
+  }, [systemInfo.realtime_mode])
+
+  useEffect(() => {
+    if ((summary.state_version || 0) > (systemInfo.state_version || 0)) {
+      setSystemInfo((current) => ({
+        ...current,
+        state_version: summary.state_version,
+        last_updated: summary.last_updated || current.last_updated
+      }))
+    }
+  }, [summary.state_version, summary.last_updated])
 
   const handleIngestNow = async () => {
     if (ingesting) return
@@ -100,23 +150,13 @@ export default function AppShell({ session, onLogout }) {
     }
   }
 
-  const handleLogout = async () => {
-    try {
-      await logout()
-    } catch (error) {
-      console.error('Logout failed:', error)
-    } finally {
-      onLogout?.()
-    }
-  }
-
   const shellContext = useMemo(() => ({
     refreshToken,
     requestRefresh,
-    session,
+    systemInfo,
     summary,
     wsConnected
-  }), [refreshToken, requestRefresh, session, summary, wsConnected])
+  }), [refreshToken, requestRefresh, systemInfo, summary, wsConnected])
 
   return (
     <div className="app-canvas min-h-screen">
@@ -127,7 +167,6 @@ export default function AppShell({ session, onLogout }) {
         onRefresh={requestRefresh}
         onIngestNow={handleIngestNow}
         ingesting={ingesting}
-        onLogout={handleLogout}
       />
       <main className="app-shell mx-auto max-w-[1720px] px-4 py-8 sm:px-6 sm:py-10 lg:px-10 lg:py-12 2xl:px-12">
         <Outlet context={shellContext} />

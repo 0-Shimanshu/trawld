@@ -144,8 +144,9 @@ Automatic behavior:
 - Startup rescan of watched roots.
 - Manifest-change rescans.
 - Scheduled rescans every five minutes by default.
-- Inventory export after scans.
-- HTTP heartbeat every fifteen seconds by default.
+- Batch inventory export after root scans.
+- Snapshot-hash dedupe so unchanged projects are skipped locally.
+- HTTP heartbeat every fifteen seconds by default, with jitter to avoid synchronized reporting.
 - Local runtime-hook listener on `127.0.0.1:7654`.
 
 Heartbeat payloads let the Vercel-hosted dashboard show online/offline state without relying on long-running hosted WebSockets.
