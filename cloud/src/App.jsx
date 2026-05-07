@@ -1,12 +1,15 @@
-import { useMemo, useState, useEffect } from 'react'
+import { useEffect, useState } from 'react'
+import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
 import { Chart as ChartJS, CategoryScale, LinearScale, PointElement, LineElement, BarElement, ArcElement, Title, Tooltip, Legend, Filler } from 'chart.js'
-import TopNav from './components/TopNav'
-import Dashboard from './components/Dashboard'
-import MasterDashboard from './components/MasterDashboard'
-import Machines from './components/Machines'
-import Alerts from './components/Alerts'
-import Packages from './components/Packages'
-import Analytics from './components/Analytics'
+import { getCurrentUser } from './api/auth'
+import AppShell from './layouts/AppShell'
+import LoginPage from './components/LoginPage'
+import OverviewPage from './pages/OverviewPage'
+import MachinesPage from './pages/MachinesPage'
+import MachineDetailPage from './pages/MachineDetailPage'
+import AlertsPage from './pages/AlertsPage'
+import PackagesPage from './pages/PackagesPage'
+import AnalyticsPage from './pages/AnalyticsPage'
 
 ChartJS.register(
   CategoryScale,
@@ -22,157 +25,57 @@ ChartJS.register(
 )
 
 function App() {
-  const [activeSection, setActiveSection] = useState('dashboard')
-  const [scope, setScope] = useState('master') // 'master' | 'machine'
-  const [selectedMachineId, setSelectedMachineId] = useState('')
-  const [data, setData] = useState({
-    alerts: [],
-    machines: [],
-    packages: new Map()
-  })
-  const [loading, setLoading] = useState(true)
-  const [wsConnected, setWsConnected] = useState(false)
+  const [session, setSession] = useState(null)
+  const [checkingSession, setCheckingSession] = useState(true)
 
   useEffect(() => {
-    fetchData()
-    connectWebSocket()
-    const interval = setInterval(fetchData, 5000)
-    return () => clearInterval(interval)
-  }, [scope, selectedMachineId])
-
-  const fetchData = async () => {
-    try {
-      const urlParams =
-        scope === 'machine' && selectedMachineId
-          ? `?machine_id=${encodeURIComponent(selectedMachineId)}`
-          : ''
-      
-      const [alertsRes, machinesRes] = await Promise.all([
-        fetch(`/alerts${urlParams}`),
-        fetch(`/machines${urlParams}`)
-      ])
-      
-      const alerts = await alertsRes.json()
-      const machines = await machinesRes.json()
-      
-      setData({
-        alerts: alerts.alerts || [],
-        machines: machines.machines || [],
-        packages: new Map()
+    let disposed = false
+    getCurrentUser()
+      .then((nextSession) => {
+        if (!disposed) setSession(nextSession)
       })
-      setLoading(false)
-    } catch (error) {
-      console.error('Failed to fetch data:', error)
-      setLoading(false)
+      .catch(() => {
+        if (!disposed) setSession(null)
+      })
+      .finally(() => {
+        if (!disposed) setCheckingSession(false)
+      })
+
+    return () => {
+      disposed = true
     }
+  }, [])
+
+  if (checkingSession) {
+    return (
+      <div className="app-canvas flex min-h-screen items-center justify-center">
+        <div className="flex flex-col items-center gap-4">
+          <div className="h-12 w-12 animate-spin rounded-full border-4 border-blue-600 border-t-transparent"></div>
+          <p className="text-sm font-black uppercase tracking-[0.18em] text-slate-400">Checking session</p>
+        </div>
+      </div>
+    )
   }
 
-  const connectWebSocket = () => {
-    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
-    const wsUrl = `${protocol}//${window.location.host}/agents`
-    
-    try {
-      const ws = new WebSocket(wsUrl)
-      
-      ws.onopen = () => {
-        setWsConnected(true)
-        console.log('WebSocket connected')
-      }
-      
-      ws.onmessage = (event) => {
-        try {
-          const message = JSON.parse(event.data)
-          if (message.type === 'CVE_ALERT') {
-            fetchData()
-          }
-        } catch (e) {
-          console.error('WebSocket message error:', e)
-        }
-      }
-      
-      ws.onclose = () => {
-        setWsConnected(false)
-        setTimeout(connectWebSocket, 5000)
-      }
-      
-      ws.onerror = () => {
-        setWsConnected(false)
-      }
-    } catch (e) {
-      console.error('WebSocket connection failed:', e)
-      setWsConnected(false)
-    }
-  }
-
-  const machineOptions = useMemo(() => {
-    return (data.machines || []).map(m => ({
-      id: m.uuid,
-      label: `${m.hostname || 'Unknown'} (${m.uuid?.slice(0, 8)}...)`
-    }))
-  }, [data.machines])
-
-  // keep a reasonable default selection when switching to machine scope
-  useEffect(() => {
-    if (scope === 'machine' && !selectedMachineId && machineOptions.length) {
-      setSelectedMachineId(machineOptions[0].id)
-    }
-    if (scope === 'master') {
-      setSelectedMachineId('')
-    }
-  }, [scope, machineOptions, selectedMachineId])
-
-  const ingestNow = async () => {
-    try {
-      await fetch('/ingest-now', { method: 'POST' })
-      await fetchData()
-    } catch (e) {
-      console.error('ingest-now failed', e)
-    }
-  }
-
-  const renderSection = () => {
-    switch (activeSection) {
-      case 'dashboard':
-        return scope === 'master'
-          ? <MasterDashboard data={data} loading={loading} />
-          : <Dashboard data={data} loading={loading} />
-      case 'machines':
-        return <Machines data={data} loading={loading} />
-      case 'alerts':
-        return <Alerts data={data} loading={loading} />
-      case 'packages':
-        return <Packages data={data} loading={loading} machineId={selectedMachineId} scope={scope} />
-      case 'analytics':
-        return <Analytics data={data} loading={loading} />
-      default:
-        return scope === 'master'
-          ? <MasterDashboard data={data} loading={loading} />
-          : <Dashboard data={data} loading={loading} />
-    }
+  if (!session) {
+    return <LoginPage onAuthenticated={setSession} />
   }
 
   return (
-    <div className="min-h-screen bg-dark-900">
-      <TopNav 
-        activeSection={activeSection} 
-        setActiveSection={setActiveSection}
-        wsConnected={wsConnected}
-        alertsCount={data.alerts.length}
-        machinesCount={data.machines.length}
-        onRefresh={fetchData}
-        scope={scope}
-        setScope={setScope}
-        machineOptions={machineOptions}
-        selectedMachineId={selectedMachineId}
-        setSelectedMachineId={setSelectedMachineId}
-        onIngestNow={ingestNow}
-      />
-      <main className="container mx-auto px-4 py-8">
-        {renderSection()}
-      </main>
-    </div>
+    <BrowserRouter>
+      <Routes>
+        <Route element={<AppShell session={session} onLogout={() => setSession(null)} />}>
+          <Route index element={<OverviewPage />} />
+          <Route path="/machines" element={<MachinesPage />} />
+          <Route path="/machines/:machineId" element={<MachineDetailPage />} />
+          <Route path="/alerts" element={<AlertsPage />} />
+          <Route path="/packages" element={<PackagesPage />} />
+          <Route path="/analytics" element={<AnalyticsPage />} />
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Route>
+      </Routes>
+    </BrowserRouter>
   )
 }
 
 export default App
-

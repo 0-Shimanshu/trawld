@@ -1,175 +1,172 @@
 import { useMemo } from 'react'
-import { Line, Pie, Doughnut } from 'react-chartjs-2'
+import { Bar, Doughnut, Line } from 'react-chartjs-2'
 
 export default function Analytics({ data, loading }) {
-  const alerts = data.alerts || []
+  const alerts = data?.alerts || []
+  const projects = data?.projects || []
+  const packages = data?.packages || []
 
-  const trendsData = useMemo(() => {
-    // Last 30 days
-    const days = []
+  const timelineData = useMemo(() => {
+    const labels = []
     const critical = []
-    const high = []
-    const medium = []
-    
-    for (let i = 29; i >= 0; i--) {
+    const total = []
+
+    for (let index = 13; index >= 0; index -= 1) {
       const date = new Date()
-      date.setDate(date.getDate() - i)
-      days.push(date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }))
-      
-      const dayStart = new Date(date.setHours(0, 0, 0, 0))
-      const dayEnd = new Date(date.setHours(23, 59, 59, 999))
-      
-      critical.push(alerts.filter(a => {
-        const alertTime = new Date(a.created_at)
-        return a.severity === 'critical' && alertTime >= dayStart && alertTime <= dayEnd
-      }).length)
-      
-      high.push(alerts.filter(a => {
-        const alertTime = new Date(a.created_at)
-        return a.severity === 'high' && alertTime >= dayStart && alertTime <= dayEnd
-      }).length)
-      
-      medium.push(alerts.filter(a => {
-        const alertTime = new Date(a.created_at)
-        return a.severity === 'medium' && alertTime >= dayStart && alertTime <= dayEnd
-      }).length)
+      date.setDate(date.getDate() - index)
+      const start = new Date(date)
+      start.setHours(0, 0, 0, 0)
+      const end = new Date(date)
+      end.setHours(23, 59, 59, 999)
+
+      labels.push(start.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }))
+      const matching = alerts.filter((alert) => {
+        const seen = new Date(alert.updated_at || alert.created_at)
+        return seen >= start && seen <= end
+      })
+      total.push(matching.length)
+      critical.push(matching.filter((alert) => alert.severity === 'critical').length)
     }
-    
+
     return {
-      labels: days,
+      labels,
       datasets: [
         {
-          label: 'Critical',
+          label: 'All Findings',
+          data: total,
+          borderColor: '#2563eb',
+          backgroundColor: 'rgba(37, 99, 235, 0.12)',
+          fill: true,
+          tension: 0.35
+        },
+        {
+          label: 'Critical Findings',
           data: critical,
-          borderColor: 'rgb(239, 68, 68)',
-          backgroundColor: 'rgba(239, 68, 68, 0.1)',
+          borderColor: '#ef4444',
+          backgroundColor: 'rgba(239, 68, 68, 0.12)',
           fill: true,
-          tension: 0.4
-        },
-        {
-          label: 'High',
-          data: high,
-          borderColor: 'rgb(245, 158, 11)',
-          backgroundColor: 'rgba(245, 158, 11, 0.1)',
-          fill: true,
-          tension: 0.4
-        },
-        {
-          label: 'Medium',
-          data: medium,
-          borderColor: 'rgb(59, 130, 246)',
-          backgroundColor: 'rgba(59, 130, 246, 0.1)',
-          fill: true,
-          tension: 0.4
+          tension: 0.35
         }
       ]
     }
   }, [alerts])
 
-  const severityData = useMemo(() => {
-    const counts = { critical: 0, high: 0, medium: 0, low: 0 }
-    alerts.forEach(a => {
-      const sev = (a.severity || 'low').toLowerCase()
-      if (counts[sev] !== undefined) counts[sev]++
-    })
-    
-    return {
-      labels: ['Critical', 'High', 'Medium', 'Low'],
-      datasets: [{
-        data: [counts.critical, counts.high, counts.medium, counts.low],
-        backgroundColor: [
-          'rgba(239, 68, 68, 0.8)',
-          'rgba(245, 158, 11, 0.8)',
-          'rgba(59, 130, 246, 0.8)',
-          'rgba(148, 163, 184, 0.8)'
-        ]
-      }]
-    }
-  }, [alerts])
-
   const ecosystemData = useMemo(() => {
-    const ecoCounts = {}
-    alerts.forEach(a => {
-      const eco = a.package?.ecosystem || 'Unknown'
-      ecoCounts[eco] = (ecoCounts[eco] || 0) + 1
-    })
-    
+    const counts = {}
+    for (const pkg of packages) {
+      counts[pkg.ecosystem] = (counts[pkg.ecosystem] || 0) + 1
+    }
     return {
-      labels: Object.keys(ecoCounts),
+      labels: Object.keys(counts),
       datasets: [{
-        data: Object.values(ecoCounts),
-        backgroundColor: [
-          'rgba(59, 130, 246, 0.8)',
-          'rgba(16, 185, 129, 0.8)',
-          'rgba(168, 85, 247, 0.8)',
-          'rgba(239, 68, 68, 0.8)',
-          'rgba(245, 158, 11, 0.8)'
-        ]
+        data: Object.values(counts),
+        backgroundColor: ['#2563eb', '#10b981', '#f97316', '#8b5cf6'],
+        borderWidth: 0
       }]
     }
-  }, [alerts])
+  }, [packages])
+
+  const projectPressureData = useMemo(() => {
+    const ranked = projects
+      .slice()
+      .sort((left, right) => (right.alert_count || 0) - (left.alert_count || 0))
+      .slice(0, 8)
+
+    return {
+      labels: ranked.map((project) => project.label || project.name),
+      datasets: [{
+        label: 'Open Alerts',
+        data: ranked.map((project) => project.alert_count || 0),
+        backgroundColor: 'rgba(239, 68, 68, 0.78)',
+        borderRadius: 12
+      }]
+    }
+  }, [projects])
+
+  if (loading) {
+    return (
+      <div className="flex flex-col items-center justify-center py-24 space-y-4">
+        <div className="w-12 h-12 border-4 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
+        <p className="text-slate-500 font-semibold">Preparing analytics...</p>
+      </div>
+    )
+  }
 
   const chartOptions = {
     responsive: true,
     maintainAspectRatio: false,
     plugins: {
       legend: {
-        labels: { color: '#94a3b8' }
+        position: 'bottom',
+        labels: { color: '#64748b', usePointStyle: true, padding: 18 }
       }
     },
     scales: {
       x: {
-        grid: { color: '#334155' },
-        ticks: { color: '#94a3b8' }
+        grid: { display: false },
+        ticks: { color: '#64748b' }
       },
       y: {
-        grid: { color: '#334155' },
-        ticks: { color: '#94a3b8' }
+        beginAtZero: true,
+        grid: { color: '#e2e8f0' },
+        ticks: { color: '#64748b', precision: 0, stepSize: 1 }
       }
     }
   }
 
-  if (loading) {
-    return <div className="text-center py-20 text-gray-400">Loading analytics...</div>
-  }
-
   return (
-    <div className="space-y-6">
+    <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
       <div>
-        <h1 className="text-3xl font-bold text-white mb-2">Analytics</h1>
-        <p className="text-gray-400">Advanced insights and trends</p>
+        <h1 className="text-3xl sm:text-4xl font-black tracking-tight text-slate-950">Security Analytics</h1>
+        <p className="mt-2 text-slate-500">Trend the velocity of project-level findings, compare ecosystem exposure, and see which projects are absorbing the most risk.</p>
       </div>
 
-      <div className="card">
-        <div className="mb-4">
-          <h3 className="text-lg font-semibold text-white mb-1">Vulnerability Trends</h3>
-          <p className="text-sm text-gray-400">Last 30 days analysis</p>
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        <div className="rounded-3xl border border-slate-200/70 bg-white px-5 py-4 shadow-sm">
+          <div className="text-[11px] font-black uppercase tracking-[0.18em] text-slate-400">Projects In View</div>
+          <div className="mt-2 text-3xl font-black text-slate-950">{projects.length}</div>
         </div>
-        <div className="h-96">
-          <Line data={trendsData} options={chartOptions} />
+        <div className="rounded-3xl border border-slate-200/70 bg-white px-5 py-4 shadow-sm">
+          <div className="text-[11px] font-black uppercase tracking-[0.18em] text-slate-400">Packages In View</div>
+          <div className="mt-2 text-3xl font-black text-slate-950">{packages.length}</div>
+        </div>
+        <div className="rounded-3xl border border-slate-200/70 bg-white px-5 py-4 shadow-sm">
+          <div className="text-[11px] font-black uppercase tracking-[0.18em] text-slate-400">Active Findings</div>
+          <div className="mt-2 text-3xl font-black text-rose-600">{alerts.length}</div>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <div className="card">
-          <div className="mb-4">
-            <h3 className="text-lg font-semibold text-white mb-1">Severity Breakdown</h3>
+      <div className="card border-none shadow-xl shadow-slate-200/40">
+        <div className="mb-6">
+          <h3 className="text-xl font-black text-slate-950 tracking-tight">14-Day Findings Trend</h3>
+          <p className="text-sm text-slate-500">See whether fleet pressure is expanding through more alerts or becoming concentrated in critical incidents.</p>
+        </div>
+        <div className="h-[360px] sm:h-[420px]">
+          <Line data={timelineData} options={chartOptions} />
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+        <div className="card border-none shadow-xl shadow-slate-200/40">
+          <div className="mb-6">
+            <h3 className="text-xl font-black text-slate-950 tracking-tight">Ecosystem Coverage</h3>
+            <p className="text-sm text-slate-500">Break down the current package inventory by ecosystem.</p>
           </div>
-          <div className="h-64">
-            <Pie data={severityData} options={chartOptions} />
+          <div className="h-[320px] sm:h-[360px]">
+            <Doughnut data={ecosystemData} options={{ ...chartOptions, cutout: '68%' }} />
           </div>
         </div>
 
-        <div className="card">
-          <div className="mb-4">
-            <h3 className="text-lg font-semibold text-white mb-1">Ecosystem Distribution</h3>
+        <div className="card border-none shadow-xl shadow-slate-200/40">
+          <div className="mb-6">
+            <h3 className="text-xl font-black text-slate-950 tracking-tight">Most Pressured Projects</h3>
+            <p className="text-sm text-slate-500">Projects with the highest current open-alert counts.</p>
           </div>
-          <div className="h-64">
-            <Doughnut data={ecosystemData} options={chartOptions} />
+          <div className="h-[320px] sm:h-[360px]">
+            <Bar data={projectPressureData} options={{ ...chartOptions, indexAxis: 'y' }} />
           </div>
         </div>
       </div>
     </div>
   )
 }
-

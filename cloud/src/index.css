@@ -1,48 +1,109 @@
+@import url('https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Space+Grotesk:wght@500;700&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 @layer base {
+  :root {
+    color-scheme: light;
+    --app-bg:
+      radial-gradient(circle at top left, rgba(56, 189, 248, 0.16), transparent 28%),
+      radial-gradient(circle at top right, rgba(59, 130, 246, 0.12), transparent 24%),
+      linear-gradient(180deg, #f8fbff 0%, #eef4ff 42%, #f8fafc 100%);
+  }
+
+  html {
+    scroll-behavior: smooth;
+  }
+
   body {
-    @apply bg-dark-900 text-gray-100 font-sans antialiased;
+    font-family: "Manrope", ui-sans-serif, system-ui, sans-serif;
+    background: var(--app-bg);
+    @apply text-slate-900 antialiased;
+  }
+
+  h1, h2, h3, h4 {
+    font-family: "Space Grotesk", "Manrope", ui-sans-serif, system-ui, sans-serif;
+  }
+
+  #root {
+    @apply min-h-screen;
   }
 }
 
 @layer components {
   .card {
-    @apply bg-dark-800 border border-dark-700 rounded-xl p-6 shadow-lg;
+    @apply rounded-[34px] border border-white/80 bg-white p-8 shadow-[0_30px_80px_-42px_rgba(15,23,42,0.3)] transition-all duration-300 hover:shadow-[0_34px_88px_-44px_rgba(15,23,42,0.34)];
   }
   
   .btn-primary {
-    @apply px-4 py-2 bg-primary-600 text-white rounded-lg font-medium hover:bg-primary-700 transition-colors duration-200;
+    @apply flex items-center justify-center gap-2 rounded-2xl bg-slate-950 px-5 py-3 text-white font-black shadow-[0_18px_34px_-24px_rgba(15,23,42,0.9)] transition-all duration-200 hover:bg-slate-800 active:scale-95;
   }
   
   .btn-secondary {
-    @apply px-4 py-2 bg-dark-700 text-gray-200 rounded-lg font-medium hover:bg-dark-600 transition-colors duration-200 border border-dark-600;
+    @apply flex items-center justify-center gap-2 rounded-2xl border border-slate-200/90 bg-white px-5 py-3 text-slate-700 font-black shadow-sm transition-all duration-200 hover:bg-slate-50 active:scale-95;
   }
   
   .metric-card {
-    @apply card hover:border-primary-500/50 transition-all duration-300 hover:shadow-xl hover:-translate-y-1;
+    @apply card hover:-translate-y-1 hover:border-blue-300/50;
   }
   
   .badge {
-    @apply px-2 py-1 rounded-md text-xs font-semibold uppercase tracking-wide;
+    @apply px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-[0.18em] border;
   }
   
   .badge-critical {
-    @apply bg-red-500/20 text-red-400 border border-red-500/30;
+    @apply bg-red-50 text-red-700 border-red-100;
   }
   
   .badge-high {
-    @apply bg-orange-500/20 text-orange-400 border border-orange-500/30;
+    @apply bg-orange-50 text-orange-700 border-orange-100;
   }
   
   .badge-medium {
-    @apply bg-yellow-500/20 text-yellow-400 border border-yellow-500/30;
+    @apply bg-blue-50 text-blue-700 border-blue-100;
   }
   
   .badge-low {
-    @apply bg-gray-500/20 text-gray-400 border border-gray-500/30;
+    @apply bg-slate-50 text-slate-600 border-slate-100;
+  }
+
+  .soft-panel {
+    @apply rounded-[32px] border border-white/80 bg-white shadow-[0_24px_64px_-40px_rgba(15,23,42,0.24)];
+  }
+
+  .app-canvas {
+    min-height: 100vh;
+    background:
+      linear-gradient(135deg, rgba(255,255,255,0.52), rgba(255,255,255,0.18)),
+      var(--app-bg);
+  }
+
+  .app-shell {
+    position: relative;
+  }
+
+  .app-shell::before {
+    content: "";
+    position: absolute;
+    inset: 1rem 0 auto;
+    height: 220px;
+    border-radius: 48px;
+    background: linear-gradient(135deg, rgba(15, 23, 42, 0.03), rgba(37, 99, 235, 0.01));
+    pointer-events: none;
+    z-index: -1;
+  }
+
+  .custom-scrollbar::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  .custom-scrollbar::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  .custom-scrollbar::-webkit-scrollbar-thumb {
+    @apply bg-slate-200 rounded-full hover:bg-slate-300 transition-colors;
   }
 }
 

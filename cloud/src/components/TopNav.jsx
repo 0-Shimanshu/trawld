@@ -1,119 +1,108 @@
+import { NavLink, useLocation } from 'react-router-dom'
+
+const NAV_ITEMS = [
+  { to: '/', icon: 'chart-pie', label: 'Overview' },
+  { to: '/machines', icon: 'desktop', label: 'Machines' },
+  { to: '/alerts', icon: 'triangle-exclamation', label: 'Alerts' },
+  { to: '/packages', icon: 'boxes-stacked', label: 'Packages' },
+  { to: '/analytics', icon: 'chart-line', label: 'Analytics' }
+]
 
 export default function TopNav({
-  activeSection,
-  setActiveSection,
   wsConnected,
-  alertsCount,
-  machinesCount,
+  summary,
+  summaryLoading,
   onRefresh,
-  scope,
-  setScope,
-  machineOptions,
-  selectedMachineId,
-  setSelectedMachineId,
-  onIngestNow
+  onIngestNow,
+  ingesting,
+  onLogout
 }) {
-  const navItems = [
-    { id: 'dashboard', icon: 'chart-pie', label: scope === 'master' ? 'Master Dashboard' : 'Machine Dashboard' },
-    { id: 'machines', icon: 'server', label: 'Machines', badge: machinesCount },
-    { id: 'alerts', icon: 'bell', label: 'Alerts', badge: alertsCount, badgeType: 'alert' },
-    { id: 'packages', icon: 'boxes', label: 'Packages' },
-    { id: 'analytics', icon: 'chart-line', label: 'Analytics' },
-  ]
+  const location = useLocation()
+  const alertsCount = (summary.alerts || []).filter((alert) => alert.status !== 'ack').length
+  const machinesCount = (summary.machines || []).length
+  const projectsCount = (summary.projects || []).length
+  const packagesCount = (summary.packages || []).length
+  const isMachineDetail = location.pathname.startsWith('/machines/')
+  const navTitle = isMachineDetail ? 'Machine Detail' : 'Cloud Brain'
 
   return (
-    <header className="bg-dark-800 border-b border-dark-700 sticky top-0 z-50 backdrop-blur-sm bg-opacity-95">
-      <div className="container mx-auto px-4">
-        <div className="flex items-center justify-between h-16">
-          {/* Logo */}
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-gradient-to-br from-primary-500 to-purple-600 rounded-lg flex items-center justify-center">
-              <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4" />
-              </svg>
+    <header className="sticky top-0 z-50 border-b border-white/60 bg-white/72 backdrop-blur-2xl shadow-[0_28px_80px_-44px_rgba(15,23,42,0.38)]">
+      <div className="mx-auto flex max-w-[1720px] flex-col gap-5 px-4 py-4 sm:px-6 lg:px-10 2xl:px-12">
+        <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
+          <div className="flex min-w-0 items-center gap-4">
+            <div className="flex h-14 w-14 items-center justify-center rounded-[22px] bg-[linear-gradient(135deg,_#020617,_#2563eb_72%)] text-white shadow-[0_22px_44px_-22px_rgba(37,99,235,0.75)]">
+              <i className="fas fa-shield-virus text-xl"></i>
             </div>
-            <div>
-              <div className="text-lg font-bold text-white">VulnPkg</div>
-              <div className="text-xs text-gray-400 uppercase tracking-wide">Security Platform</div>
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-2">
+                <div className="text-xl font-black tracking-tight text-slate-950 sm:text-2xl">Sentry Control Center</div>
+                <span className="rounded-full border border-slate-200/80 bg-slate-50 px-3 py-1 text-[10px] font-black uppercase tracking-[0.22em] text-slate-500">
+                  {navTitle}
+                </span>
+              </div>
+              <div className="text-[11px] font-black uppercase tracking-[0.28em] text-slate-400">
+                Project-scoped runtime visibility and remediation orchestration
+              </div>
             </div>
           </div>
 
-          {/* Navigation */}
-          <nav className="flex items-center gap-1">
-            {navItems.map(item => (
-              <button
-                key={item.id}
-                onClick={() => setActiveSection(item.id)}
-                className={`relative flex items-center gap-2 px-4 py-2 rounded-lg font-medium text-sm transition-all ${
-                  activeSection === item.id
-                    ? 'bg-primary-500/20 text-primary-400'
-                    : 'text-gray-400 hover:text-gray-200 hover:bg-dark-700'
-                }`}
-              >
-                <i className={`fas fa-${item.icon}`}></i>
-                <span>{item.label}</span>
-                {item.badge !== undefined && (
-                  <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${
-                    item.badgeType === 'alert' 
-                      ? 'bg-red-500/20 text-red-400' 
-                      : 'bg-dark-700 text-gray-400'
-                  }`}>
-                    {item.badge}
-                  </span>
-                )}
-              </button>
-            ))}
+          <div className="flex flex-wrap items-center gap-3 xl:justify-end">
+            <div className="rounded-full border border-slate-200/80 bg-white/90 px-4 py-2.5 text-sm font-black text-slate-600 shadow-sm">
+              {summaryLoading ? 'Refreshing summary...' : `${machinesCount} machines · ${projectsCount} projects · ${packagesCount} packages`}
+            </div>
+            <div className="rounded-full border border-rose-100 bg-rose-50 px-4 py-2.5 text-sm font-black text-rose-700">
+              {alertsCount} open alerts
+            </div>
+            <div className="inline-flex items-center gap-2 rounded-full border border-slate-200/80 bg-white px-4 py-2.5 shadow-sm">
+              <span className={`h-2.5 w-2.5 rounded-full ${wsConnected ? 'bg-emerald-500 animate-pulse' : 'bg-rose-500'}`}></span>
+              <span className="text-[11px] font-black uppercase tracking-[0.18em] text-slate-500">
+                {wsConnected ? 'Realtime Connected' : 'Realtime Offline'}
+              </span>
+            </div>
+          </div>
+        </div>
+
+        <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
+          <nav className="flex items-center gap-2 overflow-x-auto pb-1 custom-scrollbar">
+            {NAV_ITEMS.map((item) => {
+              const isActive = item.to === '/'
+                ? location.pathname === '/'
+                : location.pathname === item.to || location.pathname.startsWith(`${item.to}/`)
+
+              return (
+                <NavLink
+                  key={item.to}
+                  to={item.to}
+                  className={`shrink-0 inline-flex items-center gap-2 rounded-2xl px-5 py-3.5 text-sm font-black transition-all ${
+                    isActive
+                      ? 'bg-slate-950 text-white shadow-[0_18px_36px_-18px_rgba(15,23,42,0.8)]'
+                      : 'border border-slate-200/80 bg-white text-slate-500 hover:border-slate-300 hover:text-slate-950'
+                  }`}
+                >
+                  <i className={`fas fa-${item.icon} text-xs`}></i>
+                  <span>{item.label}</span>
+                </NavLink>
+              )
+            })}
           </nav>
 
-          {/* Right Actions */}
-          <div className="flex items-center gap-3">
-            <div className="flex items-center gap-2 px-3 py-1.5 bg-dark-700 rounded-lg">
-              <div className={`w-2 h-2 rounded-full ${wsConnected ? 'bg-green-500' : 'bg-red-500'} ${wsConnected ? 'animate-pulse' : ''}`}></div>
-              <span className="text-xs text-gray-400">{wsConnected ? 'Connected' : 'Disconnected'}</span>
-            </div>
-            <div className="flex items-center gap-2 px-3 py-1.5 bg-dark-700 rounded-lg">
-              <span className="text-xs text-gray-400">Scope</span>
-              <select
-                className="bg-dark-800 border border-dark-600 rounded-md text-xs text-gray-300 px-2 py-1 focus:outline-none focus:border-primary-500"
-                value={scope}
-                onChange={(e) => setScope(e.target.value)}
-              >
-                <option value="master">Master</option>
-                <option value="machine">Single Machine</option>
-              </select>
-            </div>
-            {scope === 'machine' && (
-              <div className="flex items-center gap-2 px-3 py-1.5 bg-dark-700 rounded-lg max-w-xs">
-                <span className="text-xs text-gray-400 whitespace-nowrap">Machine</span>
-                <select
-                  className="bg-dark-800 border border-dark-600 rounded-md text-xs text-gray-300 px-2 py-1 focus:outline-none focus:border-primary-500 truncate"
-                  value={selectedMachineId}
-                  onChange={(e) => setSelectedMachineId(e.target.value)}
-                >
-                  {machineOptions.length === 0 ? (
-                    <option value="">No machines</option>
-                  ) : (
-                    machineOptions.map(m => (
-                      <option key={m.id} value={m.id}>{m.label}</option>
-                    ))
-                  )}
-                </select>
-              </div>
-            )}
-            <button
-              onClick={onRefresh}
-              className="w-9 h-9 flex items-center justify-center bg-dark-700 hover:bg-dark-600 rounded-lg text-gray-400 hover:text-primary-400 transition-colors"
-              title="Refresh"
-            >
-              <i className="fas fa-sync-alt"></i>
+          <div className="flex flex-wrap items-center gap-2">
+            <button onClick={onRefresh} className="btn-secondary !px-4 !py-3" title="Refresh page data">
+              <i className="fas fa-rotate text-xs"></i>
+              <span>Refresh</span>
             </button>
             <button
               onClick={onIngestNow}
-              className="w-9 h-9 flex items-center justify-center bg-dark-700 hover:bg-dark-600 rounded-lg text-gray-400 hover:text-yellow-400 transition-colors"
-              title="Ingest CVEs now"
+              disabled={ingesting}
+              className={`btn-primary !px-4 !py-3 ${ingesting ? 'cursor-not-allowed opacity-70' : ''}`}
+              title={ingesting ? 'OSV sync in progress' : 'Force OSV sync'}
             >
-              <i className="fas fa-bolt"></i>
+              <i className={`fas ${ingesting ? 'fa-spinner fa-spin' : 'fa-bolt'} text-xs`}></i>
+              <span>{ingesting ? 'Syncing OSV' : 'Sync OSV'}</span>
+            </button>
+            <button onClick={onLogout} className="btn-secondary !px-4 !py-3" title="Sign out">
+              <i className="fas fa-right-from-bracket text-xs"></i>
+              <span>Logout</span>
             </button>
           </div>
         </div>
@@ -121,4 +110,3 @@ export default function TopNav({
     </header>
   )
 }
-
