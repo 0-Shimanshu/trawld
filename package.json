@@ -4,8 +4,5 @@
   "private": true,
   "scripts": {
     "start": "node start-all.js"
-  },
-  "dependencies": {
-    "lodash": "4.17.19"
   }
 }

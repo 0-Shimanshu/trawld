@@ -11,7 +11,7 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
-    "lodash": "^4.17.15",
-    "node-fetch": "^3.3.2"
+    "@wahid7852/sentry-runtime-node": "file:../runtime-node",
+    "lodash": "^4.17.15"
   }
 }
