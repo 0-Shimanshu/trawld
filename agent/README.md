@@ -1,6 +1,6 @@
 # `@wahid7852/sentry-agent`
 
-`@wahid7852/sentry-agent` is the primary customer-facing package. Users install it globally, enroll the current machine with your Cloud Brain, choose watched folders, and let the agent passively discover and export package inventory.
+`@wahid7852/sentry-agent` is the primary customer-facing package. Users install it globally, register the current machine with your Cloud Brain, choose watched folders, and let the agent passively discover and export package inventory.
 
 The agent is enough on its own. Users do not need to import anything into their apps unless they want the optional Node runtime hook.
 
@@ -24,9 +24,8 @@ https://your-sentry-cloud.vercel.app
 It:
 
 - Shows the default hosted Cloud Brain URL and allows an advanced override.
-- Asks for the enrollment token.
 - Calls `POST /api/agents/enroll`.
-- Stores the returned per-agent token locally.
+- Stores the returned random agent session id locally.
 - Asks for watched project folders.
 - Persists machine identity and config.
 - Optionally configures Windows startup.
@@ -39,11 +38,11 @@ It:
 ```bash
 sentry-agent setup
 sentry-agent setup --cloud https://your-cloud.example.com
-sentry-agent enroll --cloud https://your-cloud.example.com --token <enrollment-token>
+sentry-agent enroll --cloud https://your-cloud.example.com
 sentry-agent start
 sentry-agent status
 sentry-agent config
-sentry-agent config set-token <agent-token>
+sentry-agent config set-session <session-id>
 sentry-agent config set-cloud-http https://your-cloud.example.com
 sentry-agent install-service
 sentry-agent uninstall-service
@@ -59,7 +58,7 @@ The config is root-based rather than demo-project based:
   "cloud": {
     "http": "https://your-sentry-cloud.vercel.app",
     "ws": "",
-    "agentToken": "per-agent-token-from-enrollment"
+    "agentSessionId": "random-session-id-from-cloud"
   },
   "watchRoots": [
     "C:\\Users\\you\\Desktop\\projects",
@@ -88,15 +87,9 @@ The config is root-based rather than demo-project based:
 
 Existing `monitoredProjects` configs remain supported as a migration path, but new installs should use `watchRoots`.
 
-## Enrollment Token Guide
+## Open Enrollment Guide
 
-The enrollment token is a shared invite token controlled by the Cloud Brain owner.
-
-Cloud owner:
-
-```bash
-SENTRY_ENROLLMENT_TOKEN=<long-random-token>
-```
+The agent uses open enrollment in v1. There is no shared enrollment token and no bearer-token authorization requirement for machine/package uploads.
 
 End user:
 
@@ -107,23 +100,23 @@ sentry-agent setup
 or non-interactive:
 
 ```bash
-sentry-agent enroll --cloud https://your-sentry-cloud.vercel.app --token <enrollment-token>
+sentry-agent enroll --cloud https://your-sentry-cloud.vercel.app
 ```
 
 Flow:
 
-1. The agent sends machine metadata plus the enrollment token to `/api/agents/enroll`.
-2. The Cloud Brain validates the token against `SENTRY_ENROLLMENT_TOKEN`.
-3. The Cloud Brain generates a unique per-agent token.
-4. The agent stores that per-agent token in local config.
-5. Future exports use `Authorization: Bearer <agentToken>`.
+1. The agent sends machine metadata to `/api/agents/enroll`.
+2. The Cloud Brain creates or updates an enrolled-agent record.
+3. The Cloud Brain returns a random agent session id.
+4. The agent stores that session id in local config.
+5. Future exports send machine id, project, package, and heartbeat payloads directly to the Cloud Brain.
 
 Operationally, this means:
 
-- Rotate `SENTRY_ENROLLMENT_TOKEN` when you want to stop new machines from joining.
-- Existing machines keep working because they use per-agent tokens.
-- Revoke one machine from the dashboard/API when only that machine should stop reporting.
-- Do not publish the enrollment token in npm packages, source code, screenshots, or public docs.
+- Setup is simpler because users only need the Cloud Brain URL and watched roots.
+- Public Cloud Brain ingestion is writable by anyone who can reach the API.
+- Revoke one machine id from the dashboard/API when that machine should stop reporting.
+- If abuse becomes a concern, add invite tokens, signed enrollment links, IP allowlists, or per-user accounts later.
 
 ## Passive Discovery
 
@@ -151,7 +144,7 @@ Automatic behavior:
 - Startup rescan of watched roots.
 - Manifest-change rescans.
 - Scheduled rescans every five minutes by default.
-- Authenticated inventory export after scans.
+- Inventory export after scans.
 - HTTP heartbeat every fifteen seconds by default.
 - Local runtime-hook listener on `127.0.0.1:7654`.
 
@@ -196,15 +189,14 @@ Check:
 
 - Machine ID exists.
 - Cloud HTTP URL is correct.
-- Agent token is present.
-- Cloud auth succeeds.
+- Agent session id is present.
+- Cloud status endpoint succeeds.
 - Watched roots exist.
 - Last export time is recent.
 - Heartbeats are reaching the dashboard.
 
 Common issues:
 
-- `401` during setup: the enrollment token is wrong or the Cloud Brain env var changed.
-- `401` after setup: the per-agent token is missing, revoked, or copied incorrectly.
-- No projects discovered: watched roots are too narrow or ignored by pattern.
+- `403` after setup: the machine id was revoked by the Cloud Brain.
 - Dashboard offline: heartbeat loop is not running or the Cloud URL is unreachable.
+- No projects discovered: watched roots are too narrow or ignored by pattern.

@@ -6,14 +6,14 @@ The product path is intentionally simple:
 
 1. You deploy the Cloud Brain once.
 2. Users install the global agent package.
-3. Users run setup, enter your enrollment token, and choose project folders.
+3. Users run setup and choose project folders.
 4. The agent keeps machine, project, package, alert, and heartbeat data flowing to the dashboard.
 5. Node apps can optionally add the runtime hook for process-aware telemetry.
 
 ## Component Docs
 
-- [Cloud Brain](cloud/README.md): hosted dashboard, REST API, Vercel deployment, auth, enrollment, heartbeat, and MongoDB persistence.
-- [Sentry Agent](agent/README.md): global npm package, setup wizard, watched roots, passive discovery, automation, Windows startup, and enrollment-token usage.
+- [Cloud Brain](cloud/README.md): hosted dashboard, REST API, Vercel deployment, open agent enrollment, heartbeat, and MongoDB persistence.
+- [Sentry Agent](agent/README.md): global npm package, setup wizard, watched roots, passive discovery, automation, and Windows startup.
 - [Runtime Node Hook](runtime-node/README.md): optional Node package for PID-aware app registration and runtime events.
 - [Victim App](victim-app/README.md): optional vulnerable sample app for local testing.
 
@@ -23,9 +23,9 @@ The product path is intentionally simple:
 flowchart LR
   Owner["You deploy Cloud Brain"] --> Cloud["Cloud Brain on Vercel or self-hosted Express"]
   User["User installs @wahid7852/sentry-agent"] --> Agent["Local Sentry Agent"]
-  Agent -->|"POST /api/agents/enroll with enrollment token"| Cloud
-  Cloud -->|"per-agent token"| Agent
-  Agent -->|"Bearer agent token: machine, projects, inventory, heartbeats"| Cloud
+  Agent -->|"POST /api/agents/enroll with machine metadata"| Cloud
+  Cloud -->|"random agent session id"| Agent
+  Agent -->|"machine, projects, inventory, heartbeats"| Cloud
   Dashboard["Browser dashboard"] -->|"HTTP-only session cookie"| Cloud
   App["Optional Node app"] -->|"local HTTP registration"| Agent
   Hook["@wahid7852/sentry-runtime-node"] --> App
@@ -35,7 +35,7 @@ flowchart LR
 
 ### 1. Cloud Brain
 
-Cloud Brain is the hosted control plane. It serves the React dashboard, exposes authenticated REST APIs, validates agent enrollment, stores enrolled agents and inventory in MongoDB, and computes dashboard data.
+Cloud Brain is the hosted control plane. It serves the React dashboard, exposes REST APIs, accepts open agent enrollment, stores enrolled agents and inventory in MongoDB, and computes dashboard data.
 
 For Vercel deployments, realtime is implemented with HTTP heartbeats from agents plus dashboard polling. The self-hosted Express server can still use WebSockets for long-running local/server deployments.
 
@@ -80,7 +80,6 @@ DATABASE_NAME=sentry
 PUBLIC_CLOUD_URL=https://your-sentry-cloud.vercel.app
 SENTRY_ADMIN_PASSWORD=<long admin password>
 SENTRY_SESSION_SECRET=<long random session secret>
-SENTRY_ENROLLMENT_TOKEN=<long random invite token>
 ```
 
 4. Replace the placeholder hosted URL in the agent defaults before publishing:
@@ -106,26 +105,21 @@ npm install -g @wahid7852/sentry-agent
 sentry-agent setup
 ```
 
-During setup, the user accepts the hosted Cloud Brain URL, enters your enrollment token, chooses watched project folders, chooses whether to configure Windows startup, and can optionally install the runtime Node hook into detected Node projects.
+During setup, the user accepts the hosted Cloud Brain URL, chooses watched project folders, chooses whether to configure Windows startup, and can optionally install the runtime Node hook into detected Node projects.
 
-## How Enrollment Tokens Work
+## How Open Agent Enrollment Works
 
-The enrollment token is an invite code for new agents. It is not the long-term machine credential.
+Open enrollment means new machines can register themselves with your Cloud Brain without a shared invite token.
 
-1. You set `SENTRY_ENROLLMENT_TOKEN` on the Cloud Brain.
-2. A user runs `sentry-agent setup` or `sentry-agent enroll --cloud <url> --token <token>`.
-3. The agent sends machine metadata and the enrollment token to `POST /api/agents/enroll`.
-4. The Cloud Brain compares the submitted token to `SENTRY_ENROLLMENT_TOKEN`.
-5. If valid, the Cloud Brain creates an enrolled-agent record and returns a generated per-agent token.
-6. The agent stores that per-agent token in its local config.
-7. Future machine registration, package inventory, ingestion, and heartbeat calls use `Authorization: Bearer <agentToken>`.
+1. A user runs `sentry-agent setup` or `sentry-agent enroll --cloud <url>`.
+2. The agent sends machine metadata to `POST /api/agents/enroll`.
+3. The Cloud Brain creates or updates an enrolled-agent record.
+4. The Cloud Brain returns a random agent session id so the local config can identify the registration.
+5. Future machine registration, package inventory, ingestion, and heartbeat calls include machine id metadata and do not require bearer authorization.
 
-This gives you two controls:
+This keeps onboarding very low-friction. The tradeoff is that anyone who can reach your public Cloud Brain API can submit machine/package data. If that becomes a problem later, reintroduce invite tokens, domain allowlists, or per-user enrollment links.
 
-- Rotate the enrollment token to stop new unknown machines from enrolling.
-- Revoke an individual agent token to stop one existing machine without changing every other machine.
-
-Treat the enrollment token like an invite link: share it only with people/devices you want attached to your Cloud Brain.
+The dashboard can still mark an enrolled machine as revoked, which blocks that same machine id from continuing to report.
 
 ## Local Development
 
@@ -174,9 +168,9 @@ The Vercel dashboard uses polling plus heartbeat timestamps for online/offline s
 
 ## Security Defaults
 
-- Public Cloud Brain deployments should require `SENTRY_ADMIN_PASSWORD`, `SENTRY_SESSION_SECRET`, and `SENTRY_ENROLLMENT_TOKEN`.
+- Public Cloud Brain deployments should require `SENTRY_ADMIN_PASSWORD` and `SENTRY_SESSION_SECRET` for dashboard access.
 - Dashboard access uses an HTTP-only session cookie.
-- Agent ingestion uses per-agent bearer tokens generated during enrollment.
+- Agent ingestion is open by machine id in v1. Treat public Cloud Brain URLs as writable ingestion endpoints.
 - Package install does not auto-start services in `postinstall`.
 - Users explicitly choose watched folders. The agent avoids whole-disk scanning in v1.
 - Runtime integration does not silently edit app entry files.

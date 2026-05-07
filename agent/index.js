@@ -123,7 +123,7 @@ function buildDefaultConfig() {
     cloud: {
       http: DEFAULT_CLOUD_HTTP,
       ws: DEFAULT_CLOUD_WS,
-      agentToken: process.env.SENTRY_AGENT_TOKEN || ""
+      agentSessionId: process.env.SENTRY_AGENT_SESSION_ID || ""
     },
     policy: {
       critical: "kill",
@@ -796,23 +796,21 @@ function getCloudConfig() {
   return {
     http: config.cloud?.http || process.env.CLOUD_HTTP || DEFAULT_CLOUD_HTTP,
     ws: config.cloud?.ws || process.env.CLOUD_WS || DEFAULT_CLOUD_WS,
-    agentToken: config.cloud?.agentToken || process.env.SENTRY_AGENT_TOKEN || ""
+    agentSessionId:
+      config.cloud?.agentSessionId ||
+      config.cloud?.agentToken ||
+      process.env.SENTRY_AGENT_SESSION_ID ||
+      process.env.SENTRY_AGENT_TOKEN ||
+      ""
   };
 }
 
-function buildAgentAuthHeaders(cloud = getCloudConfig()) {
-  return cloud.agentToken
-    ? { authorization: `Bearer ${cloud.agentToken}` }
-    : {};
-}
-
-async function enrollWithCloud({ cloudHttp, enrollmentToken, label = "" }) {
+async function enrollWithCloud({ cloudHttp, label = "" }) {
   state.machineId = state.machineId || loadOrCreateId();
   const response = await fetch(`${cloudHttp.replace(/\/$/, "")}/api/agents/enroll`, {
     method: "POST",
     headers: {
-      "content-type": "application/json",
-      authorization: `Bearer ${enrollmentToken}`
+      "content-type": "application/json"
     },
     body: JSON.stringify({
       machine_id: state.machineId,
@@ -845,7 +843,7 @@ async function registerMachine() {
     try {
       const response = await fetch(`${cloud.http}/register`, {
         method: "POST",
-        headers: { "content-type": "application/json", ...buildAgentAuthHeaders(cloud) },
+        headers: { "content-type": "application/json" },
         body: JSON.stringify(machinePayload)
       });
       if (!response.ok) {
@@ -883,7 +881,7 @@ async function sendProjectInventory(snapshot) {
   try {
     const response = await fetch(`${cloud.http}/project-inventory`, {
       method: "POST",
-      headers: { "content-type": "application/json", ...buildAgentAuthHeaders(cloud) },
+      headers: { "content-type": "application/json" },
       body: JSON.stringify(payload)
     });
     if (!response.ok) {
@@ -1326,11 +1324,10 @@ async function readLocalHealth() {
 
 async function checkCloudAuth() {
   const cloud = getCloudConfig();
-  if (!cloud.agentToken) return { ok: false, reason: "agent token not configured" };
 
   try {
     const response = await fetch(`${cloud.http}/api/agents/me?machine_id=${encodeURIComponent(loadOrCreateId())}`, {
-      headers: buildAgentAuthHeaders(cloud)
+      headers: { "content-type": "application/json" }
     });
     if (!response.ok) {
       const body = await response.json().catch(() => ({}));
@@ -1345,7 +1342,8 @@ async function checkCloudAuth() {
 function redactCloudConfig(cloud = {}) {
   return {
     ...cloud,
-    agentToken: cloud.agentToken ? "<configured>" : ""
+    agentToken: cloud.agentToken ? "<legacy>" : "",
+    agentSessionId: cloud.agentSessionId ? "<configured>" : ""
   };
 }
 
@@ -1377,12 +1375,11 @@ function buildAgentStatusPayload() {
 
 async function sendHttpHeartbeat() {
   const cloud = getCloudConfig();
-  if (!cloud.agentToken) return false;
 
   try {
     const response = await fetch(`${cloud.http.replace(/\/$/, "")}/api/agents/heartbeat`, {
       method: "POST",
-      headers: { "content-type": "application/json", ...buildAgentAuthHeaders(cloud) },
+      headers: { "content-type": "application/json" },
       body: JSON.stringify(buildAgentStatusPayload())
     });
     if (!response.ok) {
@@ -1404,14 +1401,14 @@ Usage:
   sentry-agent setup [--cloud <url>]
   sentry-agent start
   sentry-agent status
-  sentry-agent enroll --cloud <url> --token <enrollment-token>
+  sentry-agent enroll [--cloud <url>] [--label <label>]
   sentry-agent config
   sentry-agent config path
   sentry-agent config add-watch-root <path>
   sentry-agent config remove-watch-root <path>
   sentry-agent config set-cloud-http <url>
   sentry-agent config set-cloud-ws <url>
-  sentry-agent config set-token <token>
+  sentry-agent config set-session <session-id>
   sentry-agent install-service
   sentry-agent uninstall-service
 `);
@@ -1443,18 +1440,13 @@ async function runSetup(args = []) {
       ? argCloud
       : await rl.question(`Cloud Brain URL [${current.cloud.http || DEFAULT_CLOUD_HTTP}]: `);
     const cloudHttp = (cloudHttpInput.trim() || current.cloud.http || DEFAULT_CLOUD_HTTP).replace(/\/$/, "");
-    const enrollmentToken = await rl.question("Enrollment token (required): ");
-    if (!enrollmentToken.trim()) {
-      throw new Error("enrollment token is required to connect this machine to the hosted Cloud Brain");
-    }
 
     const enrollment = await enrollWithCloud({
-      cloudHttp,
-      enrollmentToken: enrollmentToken.trim()
+      cloudHttp
     });
-    const agentToken = enrollment.agentToken;
+    const agentSessionId = enrollment.agentSessionId;
     const cloudWs = enrollment.cloud?.ws || current.cloud.ws || "";
-    console.log("Agent enrolled with Cloud Brain.");
+    console.log("Agent session registered with Cloud Brain.");
 
     const installServiceInput = await rl.question("Install Windows background startup task? [Y/n]: ");
 
@@ -1463,7 +1455,8 @@ async function runSetup(args = []) {
       cloud: {
         http: cloudHttp,
         ws: cloudWs,
-        agentToken
+        agentSessionId,
+        agentToken: ""
       },
       watchRoots: resolvedRoots,
       ignorePatterns: current.ignorePatterns || DEFAULT_IGNORE_PATTERNS
@@ -1524,7 +1517,7 @@ async function runStatus() {
     legacy_monitored_projects: (config.monitoredProjects || []).length,
     automation: config.automation || DEFAULT_AUTOMATION,
     last_automation_run_at: state.lastAutomationRunAt,
-    has_agent_token: Boolean(config.cloud?.agentToken),
+    has_agent_session: Boolean(config.cloud?.agentSessionId || config.cloud?.agentToken),
     cloud_auth: cloudAuth,
     cloud: redactCloudConfig(config.cloud),
     local_health: health
@@ -1576,14 +1569,15 @@ function runConfigCommand(args = []) {
     return;
   }
 
-  if (subcommand === "set-token") {
+  if (subcommand === "set-session") {
     const value = rest.join(" ").trim();
-    if (!value) throw new Error("agent token is required");
+    if (!value) throw new Error("agent session id is required");
     console.log(JSON.stringify(saveConfig({
       ...current,
       cloud: {
         ...current.cloud,
-        agentToken: value
+        agentSessionId: value,
+        agentToken: ""
       }
     }), null, 2));
     return;
@@ -1621,16 +1615,10 @@ function getArgValue(args, name) {
 async function runEnroll(args = []) {
   const current = readConfig();
   const cloudHttp = (getArgValue(args, "--cloud") || current.cloud.http).replace(/\/$/, "");
-  const enrollmentToken = getArgValue(args, "--token");
   const label = getArgValue(args, "--label") || os.hostname();
-
-  if (!enrollmentToken) {
-    throw new Error("enrollment token is required. Use --token <enrollment-token>");
-  }
 
   const enrollment = await enrollWithCloud({
     cloudHttp,
-    enrollmentToken,
     label
   });
   const cloudWs = enrollment.cloud?.ws || current.cloud.ws || `${cloudHttp.replace(/^http/i, "ws")}/agents`;
@@ -1640,7 +1628,8 @@ async function runEnroll(args = []) {
       ...current.cloud,
       http: enrollment.cloud?.http || cloudHttp,
       ws: cloudWs,
-      agentToken: enrollment.agentToken
+      agentSessionId: enrollment.agentSessionId,
+      agentToken: ""
     }
   });
 
@@ -1762,7 +1751,6 @@ function connectWs() {
   const wsUrl = new URL(cloud.ws);
   wsUrl.searchParams.set("role", "agent");
   wsUrl.searchParams.set("machine_id", state.machineId);
-  if (cloud.agentToken) wsUrl.searchParams.set("token", cloud.agentToken);
   const ws = new WebSocket(wsUrl.toString());
   let heartbeatTimer = null;
 

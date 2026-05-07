@@ -2,7 +2,7 @@
   "cloud": {
     "http": "https://your-sentry-cloud.vercel.app",
     "ws": "",
-    "agentToken": ""
+    "agentSessionId": ""
   },
   "policy": {
     "critical": "kill",

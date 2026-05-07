@@ -26,7 +26,6 @@ const PUBLIC_INDEX = path.join(PUBLIC_DIR, "index.html");
 const PUBLIC_CLOUD_URL = process.env.PUBLIC_CLOUD_URL || `http://${HOST === "0.0.0.0" ? "localhost" : HOST}:${PORT}`;
 const ADMIN_PASSWORD = process.env.SENTRY_ADMIN_PASSWORD || "";
 const SESSION_SECRET = process.env.SENTRY_SESSION_SECRET || "";
-const ENROLLMENT_TOKEN = process.env.SENTRY_ENROLLMENT_TOKEN || "";
 const AUTH_REQUIRED =
   process.env.CLOUD_AUTH_REQUIRED === undefined
     ? IS_VERCEL || HOST === "0.0.0.0"
@@ -51,10 +50,6 @@ let stateLoadPromise = null;
 
 function wantsHtml(req) {
   return req.method === "GET" && (req.headers.accept || "").includes("text/html");
-}
-
-function hashSecret(value) {
-  return crypto.createHash("sha256").update(String(value || "")).digest("hex");
 }
 
 function timingSafeEqualString(left, right) {
@@ -128,12 +123,6 @@ function requireDashboardAuth(req, res, next) {
     return;
   }
   res.status(401).json({ error: "authentication required" });
-}
-
-function getBearerToken(req) {
-  const header = req.headers.authorization || "";
-  const match = header.match(/^Bearer\s+(.+)$/i);
-  return match?.[1]?.trim() || "";
 }
 
 const state = {
@@ -738,18 +727,19 @@ async function persistAgent(agent) {
 }
 
 async function enrollAgent(payload = {}) {
-  const machineId = payload.machine_id || payload.uuid || crypto.randomUUID();
+  const machine = payload.machine || {};
+  const machineId = payload.machine_id || payload.uuid || machine.machine_id || machine.uuid || crypto.randomUUID();
   const now = new Date().toISOString();
   const existing = state.enrolledAgents.get(machineId) || {};
-  const token = crypto.randomBytes(32).toString("base64url");
+  const sessionId = existing.agent_session_id || crypto.randomBytes(24).toString("base64url");
   const agent = {
     ...existing,
     id: existing.id || machineId,
     machine_id: machineId,
-    hostname: payload.hostname || existing.hostname || "",
-    os: payload.os || existing.os || "",
-    label: payload.label || existing.label || payload.hostname || machineId,
-    agent_token_hash: hashSecret(token),
+    hostname: payload.hostname || machine.hostname || existing.hostname || "",
+    os: payload.os || machine.os || existing.os || "",
+    label: payload.label || existing.label || payload.hostname || machine.hostname || machineId,
+    agent_session_id: sessionId,
     created_at: existing.created_at || now,
     last_seen: now,
     revoked: false
@@ -758,7 +748,7 @@ async function enrollAgent(payload = {}) {
   await persistAgent(agent);
   return {
     agent: sanitizeAgent(agent),
-    agentToken: token
+    agentSessionId: sessionId
   };
 }
 
@@ -814,30 +804,27 @@ async function updateAgentRealtimeStatus(machineId, payload = {}) {
   return agent;
 }
 
-async function authenticateAgent(machineId, token) {
-  if (!AUTH_REQUIRED) {
-    if (!machineId) return null;
-    return state.enrolledAgents.get(machineId) || {
-      machine_id: machineId,
-      id: machineId,
-      revoked: false
-    };
-  }
-
-  if (!machineId || !token) return null;
+async function resolveAgentSession(machineId) {
+  if (!machineId) return null;
   const agent = state.enrolledAgents.get(machineId);
   if (!agent || agent.revoked) return null;
-  if (!timingSafeEqualString(agent.agent_token_hash, hashSecret(token))) return null;
   return touchAgent(machineId);
 }
 
-async function requireAgentAuth(req, res, next) {
+async function attachAgentSession(req, res, next) {
   const machineId = req.body?.machine?.uuid || req.body?.uuid || req.body?.machine_id || req.query?.machine_id;
-  const agent = await authenticateAgent(machineId, getBearerToken(req));
-  if (!agent) {
-    res.status(401).json({ error: "agent authentication required" });
+  if (!machineId) {
+    res.status(400).json({ error: "machine id is required" });
     return;
   }
+
+  const existing = state.enrolledAgents.get(machineId);
+  if (existing?.revoked) {
+    res.status(403).json({ error: "agent revoked" });
+    return;
+  }
+
+  const agent = existing ? await touchAgent(machineId) : (await enrollAgent({ machine_id: machineId })).agent;
   req.agent = agent;
   next();
 }
@@ -998,7 +985,7 @@ app.get("/api/auth/me", (req, res) => {
     user: { name: session.user || "admin" },
     auth_required: AUTH_REQUIRED,
     public_cloud_url: PUBLIC_CLOUD_URL,
-    enrollment_token: ENROLLMENT_TOKEN || "",
+    open_agent_enrollment: true,
     realtime_mode: REALTIME_MODE
   });
 });
@@ -1009,15 +996,15 @@ app.post("/api/auth/logout", (_req, res) => {
 });
 
 app.post("/api/agents/enroll", async (req, res) => {
-  if (AUTH_REQUIRED) {
-    const token = getBearerToken(req) || req.body?.enrollment_token || "";
-    if (!ENROLLMENT_TOKEN || !timingSafeEqualString(token, ENROLLMENT_TOKEN)) {
-      res.status(401).json({ error: "invalid enrollment token" });
-      return;
-    }
+  const body = req.body || {};
+  const machine = body.machine || {};
+  const machineId = body.machine_id || body.uuid || machine.machine_id || machine.uuid || "";
+  if (machineId && state.enrolledAgents.get(machineId)?.revoked) {
+    res.status(403).json({ error: "agent revoked" });
+    return;
   }
 
-  const result = await enrollAgent(req.body || {});
+  const result = await enrollAgent(body);
   res.json({
     ok: true,
     ...result,
@@ -1034,11 +1021,11 @@ app.get("/api/agents", requireDashboardAuth, (_req, res) => {
   });
 });
 
-app.get("/api/agents/me", requireAgentAuth, (req, res) => {
+app.get("/api/agents/me", attachAgentSession, (req, res) => {
   res.json({ ok: true, agent: sanitizeAgent(req.agent) });
 });
 
-app.post("/api/agents/heartbeat", requireAgentAuth, async (req, res) => {
+app.post("/api/agents/heartbeat", attachAgentSession, async (req, res) => {
   const machineId = req.body?.machine_id || req.body?.uuid || req.agent?.machine_id;
   const payload = req.body || {};
   const machine = upsertMachine(machineId, {
@@ -1077,7 +1064,7 @@ app.post("/api/agents/:id/revoke", requireDashboardAuth, async (req, res) => {
   res.json({ ok: true, agent: sanitizeAgent(next) });
 });
 
-app.post("/register", requireAgentAuth, async (req, res) => {
+app.post("/register", attachAgentSession, async (req, res) => {
   const { uuid, user_id, os, hostname } = req.body || {};
   if (!uuid) return res.status(400).json({ error: "uuid required" });
 
@@ -1090,7 +1077,7 @@ app.post("/register", requireAgentAuth, async (req, res) => {
   res.json({ ok: true });
 });
 
-app.post("/project-inventory", requireAgentAuth, async (req, res) => {
+app.post("/project-inventory", attachAgentSession, async (req, res) => {
   try {
     const result = await ingestProjectInventory(req.body || {});
     res.json({ ok: true, ...result });
@@ -1100,7 +1087,7 @@ app.post("/project-inventory", requireAgentAuth, async (req, res) => {
   }
 });
 
-app.post("/inventory", requireAgentAuth, async (req, res) => {
+app.post("/inventory", attachAgentSession, async (req, res) => {
   try {
     const result = await ingestProjectInventory(req.body || {});
     res.json({ ok: true, ...result });
@@ -1332,9 +1319,9 @@ app.get("*", (req, res, next) => {
   res.sendFile(PUBLIC_INDEX);
 });
 
-if (AUTH_REQUIRED && (!ADMIN_PASSWORD || !SESSION_SECRET || !ENROLLMENT_TOKEN)) {
+if (AUTH_REQUIRED && (!ADMIN_PASSWORD || !SESSION_SECRET)) {
   throw new Error(
-    "Cloud auth is required, but SENTRY_ADMIN_PASSWORD, SENTRY_SESSION_SECRET, and SENTRY_ENROLLMENT_TOKEN are not all configured"
+    "Cloud auth is required, but SENTRY_ADMIN_PASSWORD and SENTRY_SESSION_SECRET are not both configured"
   );
 }
 
@@ -1359,9 +1346,9 @@ function attachWebSocketServer(server) {
 
   if (role === "agent" || machineId) {
     role = "agent";
-    authedAgent = await authenticateAgent(machineId, url.searchParams.get("token") || "");
+    authedAgent = await resolveAgentSession(machineId);
     if (!authedAgent) {
-      ws.close(1008, "agent authentication required");
+      ws.close(1008, "agent revoked or unknown");
       return;
     }
     state.agentSockets.set(machineId, ws);

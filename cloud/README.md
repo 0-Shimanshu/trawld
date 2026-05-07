@@ -5,8 +5,8 @@ Cloud Brain is the hosted control plane for Sentry. It serves the React dashboar
 ## Responsibilities
 
 - Dashboard login and HTTP-only session handling.
-- Agent enrollment with a shared enrollment token.
-- Per-agent token validation for ingestion and heartbeats.
+- Open agent enrollment without a shared enrollment token.
+- Machine, inventory, and heartbeat ingestion by machine id.
 - Machine, project, package, and alert APIs.
 - MongoDB persistence in production.
 - Vercel-compatible HTTP realtime through agent heartbeats and dashboard polling.
@@ -24,7 +24,6 @@ DATABASE_NAME=sentry
 PUBLIC_CLOUD_URL=https://your-sentry-cloud.vercel.app
 SENTRY_ADMIN_PASSWORD=<long admin password>
 SENTRY_SESSION_SECRET=<long random session secret>
-SENTRY_ENROLLMENT_TOKEN=<long random enrollment token>
 ```
 
 Recommended:
@@ -75,13 +74,7 @@ POST /api/auth/logout
 
 The dashboard uses an HTTP-only session cookie. Protected dashboard APIs return `401` when unauthenticated.
 
-Agent ingestion uses bearer tokens:
-
-```http
-Authorization: Bearer <agentToken>
-```
-
-The agent token is created only after successful enrollment.
+Agent ingestion is open in v1. Agents identify themselves with machine metadata and a random session id returned during enrollment, but the Cloud Brain does not require bearer authorization for inventory or heartbeat uploads.
 
 ## Enrollment
 
@@ -95,7 +88,6 @@ Request:
 
 ```json
 {
-  "enrollmentToken": "shared-cloud-owner-token",
   "machine": {
     "machine_id": "generated-machine-id",
     "hostname": "DESKTOP-123",
@@ -110,7 +102,7 @@ Response:
 
 ```json
 {
-  "agentToken": "generated-per-agent-token",
+  "agentSessionId": "random-agent-session-id",
   "agent": {
     "machine_id": "generated-machine-id",
     "hostname": "DESKTOP-123",
@@ -119,11 +111,11 @@ Response:
 }
 ```
 
-The enrollment token is only used to create a new agent credential. After that, the agent uses its own per-agent token.
+The session id is a local correlation value, not an authorization secret.
 
 ## Agent APIs
 
-Agent-facing endpoints require a valid per-agent bearer token:
+Agent-facing endpoints accept machine metadata directly:
 
 ```http
 POST /register
@@ -173,7 +165,7 @@ Vercel v1:
 Self-hosted long-running server:
 
 - WebSockets can be enabled for dashboard/agent realtime.
-- Agent WebSocket connections require `role=agent`, `machine_id`, and `token`.
+- Agent WebSocket connections require `role=agent` and `machine_id`.
 - Dashboard WebSocket connections require a valid session cookie.
 
 ## Build and Verify
@@ -188,7 +180,7 @@ npm audit
 ## Security Notes
 
 - Do not disable auth on public deployments.
-- Use long random values for `SENTRY_SESSION_SECRET` and `SENTRY_ENROLLMENT_TOKEN`.
+- Use a long random value for `SENTRY_SESSION_SECRET`.
 - Store MongoDB credentials only in Vercel/environment config.
-- Rotate the enrollment token if it leaks.
-- Revoke an agent token if a machine is lost, retired, or compromised.
+- Revoke a machine id if a machine is lost, retired, or compromised.
+- Because ingestion is open, any client that can reach the API can submit machine/package data. Use reverse-proxy controls, IP allowlists, or reintroduce enrollment tokens if abuse becomes a concern.
