@@ -1,17 +1,36 @@
 const { spawn } = require('child_process');
+const fs = require('fs');
 const path = require('path');
 
-const npmCommand = process.platform === 'win32' ? 'npm.cmd' : 'npm';
 const localCloudHttp = process.env.CLOUD_HTTP || 'http://127.0.0.1:4000';
 const localCloudWs = process.env.CLOUD_WS || 'ws://127.0.0.1:4000/agents';
 
+function getNpmStartCommand() {
+  const nodeDir = path.dirname(process.execPath);
+  const npmCliPath = path.join(nodeDir, 'node_modules', 'npm', 'bin', 'npm-cli.js');
+
+  if (fs.existsSync(npmCliPath)) {
+    return {
+      cmd: process.execPath,
+      args: [npmCliPath, 'start']
+    };
+  }
+
+  return {
+    cmd: process.platform === 'win32' ? 'npm.cmd' : 'npm',
+    args: ['start']
+  };
+}
+
+const npmStart = getNpmStartCommand();
+
 const commands = [
-  { name: 'CLOUD', cwd: 'cloud', cmd: npmCommand, args: ['start'], env: process.env },
+  { name: 'CLOUD', cwd: 'cloud', cmd: npmStart.cmd, args: npmStart.args, env: process.env },
   {
     name: 'AGENT',
     cwd: 'agent',
-    cmd: npmCommand,
-    args: ['start'],
+    cmd: npmStart.cmd,
+    args: npmStart.args,
     env: {
       ...process.env,
       CLOUD_HTTP: localCloudHttp,
