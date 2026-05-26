@@ -9,7 +9,7 @@ const NAV = [
 
 function isOnline(m) {
   if (!m.last_seen) return false
-  return (Date.now() - new Date(m.last_seen).getTime()) / 1000 < 45
+  return (Date.now() - new Date(m.last_seen).getTime()) / 1000 < 90
 }
 
 export default function Sidebar({ summary, wsConnected, open, onClose }) {

@@ -1,22 +1,14 @@
-import { getInventory } from '../api/inventory'
-import { getMachines } from '../api/machines'
-import { getProjects } from '../api/projects'
+import { getState } from '../api/system'
 import useQueryResource from './useQueryResource'
 
 export default function useInventory(refreshToken, machineId = '') {
   return useQueryResource(async () => {
-    const [inventory, projects, machines] = await Promise.all([
-      getInventory({ machineId }),
-      getProjects({ machineId }),
-      machineId ? getMachines(machineId) : Promise.resolve({ machines: [] })
-    ])
-
+    const state = await getState(machineId ? { machineId } : {})
     return {
-      packages: inventory.packages || [],
-      projects: projects.projects || [],
-      selectedMachine: machineId ? (machines.machines || [])[0] || null : null,
+      packages: state.packages || [],
+      projects: state.projects || [],
+      selectedMachine: machineId ? (state.machines || [])[0] || null : null,
       scope: machineId ? 'machine' : 'master'
     }
   }, [refreshToken, machineId])
 }
-

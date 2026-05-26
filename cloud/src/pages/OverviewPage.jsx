@@ -10,7 +10,7 @@ const SEV_DOT   = { critical: 'bg-tr-red',  high: 'bg-tr-yellow',   medium: 'bg-
 
 function isOnline(m) {
   if (!m.last_seen) return false
-  return (Date.now() - new Date(m.last_seen).getTime()) / 1000 < 45
+  return (Date.now() - new Date(m.last_seen).getTime()) / 1000 < 90
 }
 
 function getTimeAgo(dateStr) {

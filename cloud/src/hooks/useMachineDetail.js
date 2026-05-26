@@ -1,29 +1,14 @@
-import { getAlerts } from '../api/alerts'
-import { getInventory } from '../api/inventory'
-import { getMachines } from '../api/machines'
-import { getProjects } from '../api/projects'
+import { getState } from '../api/system'
 import useQueryResource from './useQueryResource'
 import { EMPTY_STATE, normalizeState } from '../utils/state'
 
 export default function useMachineDetail(machineId, refreshToken) {
   const resource = useQueryResource(async () => {
     if (!machineId) return { machine: null, data: EMPTY_STATE }
-
-    const [machines, projects, inventory, alerts] = await Promise.all([
-      getMachines(machineId),
-      getProjects({ machineId }),
-      getInventory({ machineId }),
-      getAlerts({ machineId })
-    ])
-
+    const state = await getState({ machineId })
     return {
-      machine: (machines.machines || [])[0] || null,
-      data: normalizeState({
-        machines: machines.machines,
-        projects: projects.projects,
-        packages: inventory.packages,
-        alerts: alerts.alerts
-      })
+      machine: (state.machines || [])[0] || null,
+      data: normalizeState(state)
     }
   }, [machineId, refreshToken])
 
@@ -32,4 +17,3 @@ export default function useMachineDetail(machineId, refreshToken) {
     data: resource.data || { machine: null, data: EMPTY_STATE }
   }
 }
-

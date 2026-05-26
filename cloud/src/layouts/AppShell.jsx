@@ -23,6 +23,7 @@ export default function AppShell() {
   const reconnectRef = useRef(null)
   const pollRef = useRef(null)
   const idlePollsRef = useRef(0)
+  const lastStateVersionRef = useRef(0)
   const { data: summary, loading: summaryLoading, setData: setSummary } = useFleetSummary(refreshToken)
 
   const requestRefresh = useEffectEvent(() => {
@@ -32,15 +33,16 @@ export default function AppShell() {
   const pollSystemInfo = useEffectEvent(async () => {
     try {
       const next = await getSystemInfo()
-      setSystemInfo((current) => {
-        if ((next.state_version || 0) > (current.state_version || 0)) {
-          idlePollsRef.current = 0
-          startTransition(() => requestRefresh())
-        } else {
-          idlePollsRef.current += 1
-        }
-        return { ...current, ...next }
-      })
+      const nextVersion = next.state_version || 0
+      if (nextVersion > lastStateVersionRef.current) {
+        lastStateVersionRef.current = nextVersion
+        idlePollsRef.current = 0
+        setSystemInfo((current) => ({ ...current, ...next }))
+        startTransition(() => requestRefresh())
+      } else {
+        idlePollsRef.current += 1
+        setSystemInfo((current) => ({ ...current, ...next }))
+      }
     } catch (error) {
       console.error('System info polling failed:', error)
       idlePollsRef.current += 1
