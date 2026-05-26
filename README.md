@@ -1,191 +1,98 @@
-# Sentry Supply Chain Security
+# trawld
 
-Sentry is a three-part supply-chain security system for watching developer machines, discovering projects, exporting package inventory, and surfacing vulnerable dependencies in a hosted Cloud Brain dashboard.
+Package vulnerability monitoring for developer fleets. trawld watches every enrolled machine, discovers projects automatically, and surfaces vulnerable dependencies in a real-time dashboard — no code changes to your apps required.
 
-The product path is intentionally simple:
+## How it works
 
-1. You deploy the Cloud Brain once.
-2. Users install the global agent package.
-3. Users run setup and choose project folders.
-4. The agent keeps machine, project, package, alert, and heartbeat data flowing to the dashboard.
-5. Node apps can optionally add the runtime hook for process-aware telemetry.
+1. Deploy the Cloud Brain once (Vercel + MongoDB).
+2. Enroll machines by running `trawld setup`.
+3. Open the dashboard — packages are indexed, vulnerabilities matched against the OSV database, and heartbeats keep online/offline status live.
 
-## Component Docs
+## Components
 
-- [Cloud Brain](cloud/README.md): hosted dashboard, REST API, Vercel deployment, open agent enrollment, heartbeat, and MongoDB persistence.
-- [Sentry Agent](agent/README.md): global npm package, setup wizard, watched roots, passive discovery, automation, and Windows startup.
-- [Runtime Node Hook](runtime-node/README.md): optional Node package for PID-aware app registration and runtime events.
+- **[Cloud Brain](cloud/README.md)** — React dashboard + REST API, deploys to Vercel, persists to MongoDB.
+- **[trawld Agent](agent/README.md)** — global npm package, setup wizard, passive project discovery, scheduled rescans, heartbeats.
+- **[Runtime Node Hook](runtime-node/README.md)** — optional package for PID-aware process registration inside Node apps.
 
 ## Architecture
 
 ```mermaid
 flowchart LR
-  Owner["You deploy Cloud Brain"] --> Cloud["Cloud Brain on Vercel or self-hosted Express"]
-  User["User installs @wahid7852/sentry-agent"] --> Agent["Local Sentry Agent"]
-  Agent -->|"POST /api/agents/enroll with machine metadata"| Cloud
-  Cloud -->|"random agent session id"| Agent
-  Agent -->|"machine, projects, inventory, heartbeats"| Cloud
-  Dashboard["Browser dashboard"] -->|"open dashboard/API requests"| Cloud
-  App["Optional Node app"] -->|"local HTTP registration"| Agent
-  Hook["@wahid7852/sentry-runtime-node"] --> App
+  Owner["Deploy Cloud Brain"] --> Cloud["Cloud Brain on Vercel"]
+  User["npm i -g @wahid7852/trawld-agent"] --> Agent["Local Agent"]
+  Agent -->|"enroll + heartbeat"| Cloud
+  Cloud -->|"agent session id"| Agent
+  Agent -->|"inventory + alerts"| Cloud
+  Dashboard["Browser"] -->|"dashboard API"| Cloud
+  App["Optional Node app"] -->|"local HTTP"| Agent
+  Hook["@wahid7852/trawld-runtime-node"] --> App
 ```
 
-## The Three Pieces
+## Quick Start
 
-### 1. Cloud Brain
-
-Cloud Brain is the hosted control plane. It serves the React dashboard, exposes REST APIs, accepts open agent enrollment, stores enrolled agents and inventory in MongoDB, and computes dashboard data.
-
-For Vercel deployments, realtime is implemented with HTTP heartbeats from agents plus dashboard polling. The self-hosted Express server can still use WebSockets for long-running local/server deployments.
-
-### 2. Sentry Agent
-
-`@wahid7852/sentry-agent` is the primary package. It is installed globally:
-
-```bash
-npm install -g @wahid7852/sentry-agent
-sentry-agent setup
-```
-
-The agent does not need users to import code into their apps. After setup, it watches configured folders, discovers Node and Python projects by manifest files, computes package inventory, exports snapshots, sends heartbeat status, and rescans automatically.
-
-### 3. Runtime Node Hook
-
-`@wahid7852/sentry-runtime-node` is optional. It is installed inside a Node application only when the user wants runtime/PID-aware registration:
-
-```bash
-npm install @wahid7852/sentry-runtime-node
-```
-
-Then add this as the first app import:
-
-```js
-import "@wahid7852/sentry-runtime-node";
-```
-
-The hook talks to the local agent, not directly to the Cloud Brain.
-
-## Hosted Quick Start
-
-### Owner: Deploy the Cloud Brain
+### Deploy the Cloud Brain
 
 1. Create a MongoDB database.
 2. Deploy `cloud/` to Vercel.
-3. Set these Vercel environment variables:
+3. Set environment variables:
 
 ```bash
 MONGODB_URI=mongodb+srv://...
-DATABASE_NAME=sentry
-PUBLIC_CLOUD_URL=https://your-sentry-cloud.vercel.app
+DATABASE_NAME=trawld
+PUBLIC_CLOUD_URL=https://your-cloud.vercel.app
 ```
 
-4. Replace the placeholder hosted URL in the agent defaults before publishing:
-
-```text
-https://your-sentry-cloud.vercel.app
-```
-
-5. Publish the packages in this order:
+### Enroll a Machine
 
 ```bash
-cd agent
-npm publish --access public
-
-cd ../runtime-node
-npm publish --access public
+npm install -g @wahid7852/trawld-agent
+trawld setup
 ```
 
-### User: Install the Agent
+The setup wizard connects to your Cloud Brain, picks project folders to watch, and optionally configures startup. Done — the machine appears in your dashboard.
 
-```bash
-npm install -g @wahid7852/sentry-agent
-sentry-agent setup
-```
+## Open Enrollment
 
-During setup, the user accepts the hosted Cloud Brain URL, chooses watched project folders, chooses whether to configure Windows startup, and can optionally install the runtime Node hook into detected Node projects.
+Any machine that can reach your Cloud Brain URL can enroll without a token. The agent sends machine metadata to `POST /api/agents/enroll` and gets back a session ID. All future inventory and heartbeat calls use that ID.
 
-## How Open Agent Enrollment Works
-
-Open enrollment means new machines can register themselves with your Cloud Brain without a shared invite token.
-
-1. A user runs `sentry-agent setup` or `sentry-agent enroll --cloud <url>`.
-2. The agent sends machine metadata to `POST /api/agents/enroll`.
-3. The Cloud Brain creates or updates an enrolled-agent record.
-4. The Cloud Brain returns a random agent session id so the local config can identify the registration.
-5. Future machine registration, package inventory, ingestion, and heartbeat calls include machine id metadata and do not require bearer authorization.
-
-This keeps onboarding very low-friction. The tradeoff is that anyone who can reach your public Cloud Brain API can submit machine/package data. If that becomes a problem later, reintroduce invite tokens, domain allowlists, or per-user enrollment links.
-
-The dashboard can still mark an enrolled machine as revoked, which blocks that same machine id from continuing to report.
+This keeps onboarding frictionless. If you need tighter access control later, add invite tokens or an IP allowlist at the reverse-proxy level.
 
 ## Local Development
 
-Install dependencies:
-
 ```bash
+# install all deps
 npm install
 cd cloud && npm install
 cd ../agent && npm install
 cd ../runtime-node && npm install
-```
 
-Start the Cloud Brain locally:
-
-```bash
-cd cloud
+# start cloud + agent together
 npm start
 ```
 
-Start the agent locally:
+`start-all.js` starts the Cloud Brain and a local agent. The runtime hook is a package, not a service.
 
-```bash
-cd agent
-node index.js start
-```
+## Agent Behaviour
 
-Or from the repo root:
+After setup the agent runs continuously:
 
-```bash
-npm start
-```
-
-`start-all.js` starts the Cloud Brain and the local agent for development. The runtime hook is a package, not a background service.
-
-## Automation and Realtime Model
-
-The agent runs several automatic loops after setup:
-
-- Startup scan of watched roots.
-- Manifest-change rescans for supported project files.
-- Scheduled rescans every five minutes by default.
-- HTTP heartbeats every fifteen seconds by default, with jitter so agents do not all report at once.
-- Optional local runtime registrations from Node apps that import the runtime hook.
-- Batch inventory upload for root scans.
-- Snapshot-hash dedupe so unchanged projects do not re-upload or re-trigger OSV evaluation.
-
-The Vercel dashboard uses adaptive polling plus heartbeat timestamps for online/offline state. A machine is considered online when recent heartbeats are received.
-
-## Open Deployment Notes
-
-- The Cloud Brain and dashboard are intentionally open to anyone with the URL.
-- Agent ingestion is open by machine id in v1. Treat public Cloud Brain URLs as writable ingestion endpoints.
-- Package install does not auto-start services in `postinstall`.
-- Users explicitly choose watched folders. The agent avoids whole-disk scanning in v1.
-- Runtime integration does not silently edit app entry files.
-- Use reverse-proxy controls, private networking, or IP allowlists if you want deployment-level access control later.
+- Startup scan of watched roots
+- Manifest-change rescans (`package.json`, `requirements.txt`)
+- Scheduled rescans every 5 minutes
+- Heartbeats every 15 seconds (jittered)
+- Snapshot hash deduplication — unchanged projects don't re-upload
 
 ## Repository Layout
 
-```text
-cloud/         Cloud Brain dashboard and API
-agent/         Global local agent package
-runtime-node/  Optional Node runtime hook package
-start-all.js   Local development launcher
+```
+cloud/          Dashboard + API (Vercel)
+agent/          Global agent package
+runtime-node/   Optional Node runtime hook
+landing/        Static landing page (separate Vercel project)
+start-all.js    Local dev launcher
 ```
 
 ## Publish Checklist
-
-Before publishing:
 
 ```bash
 cd cloud && npm run build
@@ -193,10 +100,11 @@ cd ../agent && npm pack --dry-run
 cd ../runtime-node && npm pack --dry-run
 ```
 
-Confirm:
+- Replace the hosted URL placeholder with your real Vercel URL
+- `publishConfig.access` is `public` in both packages
+- Production environment variables are set in Vercel
+- Tested `trawld setup` against the hosted Cloud Brain
 
-- Hosted URL placeholder has been replaced with the real Vercel URL.
-- `publishConfig.access` is `public` in both npm packages.
-- No `.env`, local config, logs, generated data, or research artifacts are included.
-- Cloud Brain has production environment variables configured.
-- You have tested `sentry-agent setup` against the hosted Cloud Brain.
+## License
+
+MIT — built by [Wahid Khan](https://github.com/Wahid7852)
