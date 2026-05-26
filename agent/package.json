@@ -1,6 +1,6 @@
 {
   "name": "@wahid7852/trawld-agent",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "description": "Global local agent for trawld that discovers project manifests, exports package inventory, and connects machines to the cloud",
   "type": "module",
   "main": "index.js",

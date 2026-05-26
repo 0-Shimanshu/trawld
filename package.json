@@ -4,5 +4,8 @@
   "private": true,
   "scripts": {
     "start": "node start-all.js"
+  },
+  "dependencies": {
+    "@wahid7852/trawld-runtime-node": "^0.1.0"
   }
 }

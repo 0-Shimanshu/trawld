@@ -57,6 +57,7 @@ const state = {
   enrolledAgents: new Map(),
   vulnCache: new Map(),
   packageQueryCache: new Map(),
+  pendingCommands: new Map(),
   lastModifiedSeen: null,
   stateVersion: 1,
   lastUpdated: new Date().toISOString()
@@ -400,12 +401,21 @@ function sendAlertToAgent(machineId, alertPayload) {
   }
 }
 
-function sendCommandToAgent(machineId, payload) {
+async function sendCommandToAgent(machineId, payload) {
   const socket = state.agentSockets.get(machineId);
-  if (!socket || socket.readyState !== 1) {
-    throw new Error("owning agent is offline");
+  if (socket && socket.readyState === 1) {
+    socket.send(JSON.stringify(payload));
+    return;
   }
-  socket.send(JSON.stringify(payload));
+  // No live WebSocket — persist command so it can be delivered via next heartbeat response
+  const cmd = { ...payload, machine_id: machineId, queued_at: new Date().toISOString() };
+  if (!state.pendingCommands.has(machineId)) state.pendingCommands.set(machineId, []);
+  state.pendingCommands.get(machineId).push(cmd);
+  if (db) {
+    await db.collection("pending_commands").insertOne(cmd).catch((e) =>
+      console.error("Failed to persist pending command:", e.message)
+    );
+  }
 }
 
 async function storeVulnerability(record) {
@@ -1053,6 +1063,12 @@ app.get("/api/agents/me", attachAgentSession, (req, res) => {
 app.post("/api/agents/heartbeat", attachAgentSession, async (req, res) => {
   const machineId = req.body?.machine_id || req.body?.uuid || req.agent?.machine_id;
   const payload = req.body || {};
+
+  // Capture online status BEFORE updating last_seen
+  const prevMachine = state.machines.get(machineId);
+  const wasOnline = prevMachine?.last_seen &&
+    (Date.now() - new Date(prevMachine.last_seen).getTime()) < 90_000;
+
   const machine = upsertMachine(machineId, {
     hostname: payload.hostname || req.agent?.hostname,
     os: payload.os || req.agent?.os
@@ -1067,9 +1083,30 @@ app.post("/api/agents/heartbeat", attachAgentSession, async (req, res) => {
       observed_at: payload.status?.observed_at || new Date().toISOString()
     }
   });
-  broadcastDashboard({ type: "MACHINE_UPDATE", machine: buildMachineSummary(machineId) });
+
+  // Only bump stateVersion when machine transitions offline→online (not every 15s heartbeat)
+  if (!wasOnline) {
+    broadcastDashboard({ type: "MACHINE_UPDATE", machine: buildMachineSummary(machineId) });
+  }
+
+  // Collect pending commands from in-memory queue and DB, then clear them
+  const inMemory = state.pendingCommands.get(machineId) || [];
+  state.pendingCommands.delete(machineId);
+  let dbCommands = [];
+  if (db) {
+    try {
+      dbCommands = await db.collection("pending_commands").find({ machine_id: machineId }).toArray();
+      if (dbCommands.length > 0) {
+        await db.collection("pending_commands").deleteMany({ machine_id: machineId });
+      }
+    } catch (e) {
+      console.error("Failed to fetch pending commands:", e.message);
+    }
+  }
+  const pending_commands = [...inMemory, ...dbCommands].map(({ _id, ...cmd }) => cmd);
+
   const hasProjects = Array.from(state.projects.values()).some((p) => p.machine_id === machineId);
-  res.json({ ok: true, agent: sanitizeAgent(agent), rescan_requested: !hasProjects });
+  res.json({ ok: true, agent: sanitizeAgent(agent), rescan_requested: !hasProjects, pending_commands });
 });
 
 app.post("/api/agents/:id/revoke", async (req, res) => {
@@ -1248,23 +1285,19 @@ app.post("/alerts/:id/remediate", async (req, res) => {
   if (!alert) return res.status(404).json({ error: "alert not found" });
   if (!alert.fix) return res.status(400).json({ error: "no fix version is available for this alert" });
 
-  try {
-    sendCommandToAgent(alert.machine_id, {
-      type: "REMEDIATE_PACKAGE",
-      project_id: alert.project_id,
-      package: alert.package,
-      fix_version: alert.fix,
-      alert_id: alert.id
-    });
+  await sendCommandToAgent(alert.machine_id, {
+    type: "REMEDIATE_PACKAGE",
+    project_id: alert.project_id,
+    package: alert.package,
+    fix_version: alert.fix,
+    alert_id: alert.id
+  });
 
-    alert.remediation_requested_at = new Date().toISOString();
-    alert.updated_at = alert.remediation_requested_at;
-    await persistAlert(alert);
-    broadcastDashboard({ type: "ALERT_UPDATE", alert });
-    res.json({ ok: true, queued: true, alert });
-  } catch (error) {
-    res.status(400).json({ error: error.message });
-  }
+  alert.remediation_requested_at = new Date().toISOString();
+  alert.updated_at = alert.remediation_requested_at;
+  await persistAlert(alert);
+  broadcastDashboard({ type: "ALERT_UPDATE", alert });
+  res.json({ ok: true, queued: true, alert });
 });
 
 app.post("/scan-project/:id", async (req, res) => {
@@ -1563,13 +1596,18 @@ function attachWebSocketServer(server) {
       }
 
       if (data.type === "HEARTBEAT" && machineId) {
+        const prevMachineWs = state.machines.get(machineId);
+        const wasOnlineWs = prevMachineWs?.last_seen &&
+          (Date.now() - new Date(prevMachineWs.last_seen).getTime()) < 90_000;
         const machine = upsertMachine(machineId, {
           hostname: data.hostname,
           os: data.os
         });
         await persistMachine(machine);
         await updateAgentRealtimeStatus(machineId, data);
-        broadcastDashboard({ type: "MACHINE_UPDATE", machine: buildMachineSummary(machineId) });
+        if (!wasOnlineWs) {
+          broadcastDashboard({ type: "MACHINE_UPDATE", machine: buildMachineSummary(machineId) });
+        }
       }
     } catch (error) {
       console.error("WebSocket message error:", error.message);

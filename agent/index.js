@@ -1486,6 +1486,29 @@ function buildAgentStatusPayload() {
   };
 }
 
+function handleAgentCommand(message) {
+  if (message.type === "CVE_ALERT" && message.package) {
+    cacheAlert(message);
+    logAction(
+      `ALERT project=${message.project_id || "n/a"} package=${message.package.name}@${message.package.version} severity=${message.severity}`
+    );
+    enforceMatchingProcesses(message);
+  }
+  if (message.type === "REMEDIATE_PACKAGE") {
+    remediateProjectDependency(message.project_id, message.package?.name, message.fix_version)
+      .then(() => {
+        logAction(
+          `REMEDIATE complete project=${message.project_id} package=${message.package?.name} fix=${message.fix_version}`
+        );
+      })
+      .catch((error) => {
+        logAction(
+          `REMEDIATE failed project=${message.project_id} package=${message.package?.name} message=${error.message}`
+        );
+      });
+  }
+}
+
 async function sendHttpHeartbeat() {
   const cloud = getCloudConfig();
 
@@ -1504,6 +1527,15 @@ async function sendHttpHeartbeat() {
       logAction("server has no project data — clearing snapshot cache and rescanning");
       state.projects.clear();
       runAutomatedRootDiscovery("server-rescan").catch(() => {});
+    }
+    if (Array.isArray(body.pending_commands) && body.pending_commands.length > 0) {
+      for (const cmd of body.pending_commands) {
+        try {
+          handleAgentCommand(cmd);
+        } catch (error) {
+          logAction(`pending command error type=${cmd.type} message=${error.message}`);
+        }
+      }
     }
     return true;
   } catch (error) {
@@ -1891,27 +1923,7 @@ function connectWs() {
 
   ws.on("message", (raw) => {
     try {
-      const message = JSON.parse(raw);
-      if (message.type === "CVE_ALERT" && message.package) {
-        cacheAlert(message);
-        logAction(
-          `ALERT project=${message.project_id || "n/a"} package=${message.package.name}@${message.package.version} severity=${message.severity}`
-        );
-        enforceMatchingProcesses(message);
-      }
-      if (message.type === "REMEDIATE_PACKAGE") {
-        remediateProjectDependency(message.project_id, message.package?.name, message.fix_version)
-          .then(() => {
-            logAction(
-              `REMEDIATE complete project=${message.project_id} package=${message.package?.name} fix=${message.fix_version}`
-            );
-          })
-          .catch((error) => {
-            logAction(
-              `REMEDIATE failed project=${message.project_id} package=${message.package?.name} message=${error.message}`
-            );
-          });
-      }
+      handleAgentCommand(JSON.parse(raw));
     } catch (error) {
       logAction(`WS message error ${error.message}`);
     }
