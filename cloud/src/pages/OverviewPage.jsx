@@ -88,8 +88,8 @@ export default function OverviewPage() {
           <h1 className="text-[14px] font-semibold text-tr-text">Fleet Overview</h1>
           <p className="text-[11px] text-tr-dim">Last sync {lastSyncAgo}</p>
         </div>
-        <div className="flex gap-2">
-          <button className="btn" onClick={onIngestNow} disabled={ingesting}>
+        <div className="flex gap-2 shrink-0">
+          <button className="btn hidden sm:inline-flex" onClick={onIngestNow} disabled={ingesting}>
             {ingesting ? 'Syncing…' : 'Sync OSV'}
           </button>
           <button className="btn-primary" onClick={handleScanAll}>Rescan Fleet</button>
@@ -98,7 +98,7 @@ export default function OverviewPage() {
 
       <div className="p-5 space-y-4">
         {/* Metrics */}
-        <div className="grid grid-cols-4 gap-3">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
           <MetricCard
             label="Machines"
             value={machines.length}
@@ -123,7 +123,7 @@ export default function OverviewPage() {
         </div>
 
         {/* Two-column */}
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
           {/* Machines */}
           <div className="card">
             <div className="card-head">

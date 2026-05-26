@@ -27,7 +27,7 @@ export default function MachinePanel({ machineId, refreshToken, onClose, onResca
       />
 
       {/* Panel */}
-      <aside className="fixed top-0 right-0 h-full w-[440px] bg-tr-surface border-l border-tr-border z-50 flex flex-col overflow-hidden">
+      <aside className="fixed top-0 right-0 h-full w-full sm:w-[440px] bg-tr-surface border-l border-tr-border z-50 flex flex-col overflow-hidden">
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-4 border-b border-tr-border shrink-0">
           <div>

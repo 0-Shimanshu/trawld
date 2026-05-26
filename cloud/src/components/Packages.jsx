@@ -52,19 +52,19 @@ export default function Packages({ data, loading, onChange }) {
 
       <div className="p-5 space-y-4">
         {/* Filters + stats */}
-        <div className="flex items-center gap-3">
+        <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3">
           <input
-            className="input w-64"
+            className="input w-full sm:w-64"
             placeholder="Search package, project, version…"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
           />
-          <select className="select" value={ecosystem} onChange={(e) => setEcosystem(e.target.value)}>
+          <select className="select w-full sm:w-auto" value={ecosystem} onChange={(e) => setEcosystem(e.target.value)}>
             <option value="all">All ecosystems</option>
             <option value="npm">npm</option>
             <option value="PyPI">PyPI</option>
           </select>
-          <div className="ml-auto flex gap-4 text-[11px] text-tr-dim">
+          <div className="hidden sm:flex sm:ml-auto gap-4 text-[11px] text-tr-dim">
             <span><span className="text-tr-text font-semibold">{projectsCovered}</span> projects</span>
             <span><span className="text-tr-red font-semibold">{withFindings}</span> with findings</span>
             <span><span className="text-tr-text font-semibold">{autoUpdateReady}</span> auto-update ready</span>
@@ -75,8 +75,8 @@ export default function Packages({ data, loading, onChange }) {
         {loading ? (
           <p className="text-[12px] text-tr-dim py-8">Loading…</p>
         ) : (
-          <div className="card overflow-hidden">
-            <table className="w-full text-[12px]">
+          <div className="card overflow-x-auto">
+            <table className="w-full min-w-[600px] text-[12px]">
               <thead>
                 <tr className="border-b border-tr-border">
                   {['Package', 'Project', 'Version', 'Findings', 'Fix', 'Actions'].map((h) => (

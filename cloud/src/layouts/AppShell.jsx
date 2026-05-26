@@ -16,6 +16,7 @@ const DEFAULT_SYSTEM_INFO = {
 export default function AppShell() {
   const [refreshToken, setRefreshToken] = useState(0)
   const [wsConnected, setWsConnected] = useState(false)
+  const [navOpen, setNavOpen] = useState(false)
   const [ingesting, setIngesting] = useState(false)
   const [systemInfo, setSystemInfo] = useState(DEFAULT_SYSTEM_INFO)
   const socketRef = useRef(null)
@@ -135,8 +136,24 @@ export default function AppShell() {
 
   return (
     <div className="flex min-h-screen bg-tr-bg">
-      <Sidebar summary={summary} wsConnected={wsConnected} />
+      <Sidebar summary={summary} wsConnected={wsConnected} open={navOpen} onClose={() => setNavOpen(false)} />
       <div className="flex-1 flex flex-col min-w-0">
+        {/* Mobile topbar */}
+        <div className="md:hidden flex items-center gap-3 px-4 py-3 border-b border-tr-border bg-tr-surface shrink-0">
+          <button
+            className="flex flex-col items-center justify-center gap-[5px] w-8 h-8 text-tr-dim hover:text-tr-text"
+            onClick={() => setNavOpen(true)}
+            aria-label="Open menu"
+          >
+            <span className="w-4 h-px bg-current block" />
+            <span className="w-4 h-px bg-current block" />
+            <span className="w-4 h-px bg-current block" />
+          </button>
+          <div className="flex items-center gap-1.5">
+            <div className="w-5 h-5 bg-tr-accent rounded flex items-center justify-center text-[10px] font-bold text-white font-mono">t</div>
+            <span className="text-[13px] font-semibold text-tr-text">trawld</span>
+          </div>
+        </div>
         <Outlet context={shellContext} />
       </div>
     </div>
