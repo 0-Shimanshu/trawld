@@ -9,11 +9,11 @@
   },
   "homepage": "https://www.npmjs.com/package/@wahid7852/trawld-agent",
   "bugs": {
-    "url": "https://github.com/Wahid7852/Sentry/issues"
+    "url": "https://github.com/Wahid7852/trawld/issues"
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/Wahid7852/Sentry.git",
+    "url": "git+https://github.com/Wahid7852/trawld.git",
     "directory": "agent"
   },
   "license": "MIT",

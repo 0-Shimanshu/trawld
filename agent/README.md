@@ -1,68 +1,57 @@
-# `@wahid7852/sentry-agent`
+# `@wahid7852/trawld-agent`
 
-`@wahid7852/sentry-agent` is the primary customer-facing package. Users install it globally, register the current machine with your Cloud Brain, choose watched folders, and let the agent passively discover and export package inventory.
+The primary package. Install globally on any machine you want to monitor, run setup, and the agent starts watching your project folders and reporting to the dashboard.
 
-The agent is enough on its own. Users do not need to import anything into their apps unless they want the optional Node runtime hook.
+No code changes to your apps required.
 
 ## Install
 
 ```bash
-npm install -g @wahid7852/sentry-agent
-sentry-agent setup
-```
-
-The published package should default to your hosted Cloud Brain URL. In this repository, the placeholder must be replaced before publish:
-
-```text
-https://your-sentry-cloud.vercel.app
+npm install -g @wahid7852/trawld-agent
+trawld setup
 ```
 
 ## What Setup Does
 
-`sentry-agent setup` is the main onboarding command.
+`trawld setup` walks you through onboarding:
 
-It:
-
-- Shows the default hosted Cloud Brain URL and allows an advanced override.
-- Calls `POST /api/agents/enroll`.
-- Stores the returned random agent session id locally.
-- Asks for watched project folders.
-- Persists machine identity and config.
-- Optionally configures Windows startup.
-- Detects Node projects under watched roots.
-- Optionally installs `@wahid7852/sentry-runtime-node` into selected Node projects.
-- Prints the import line for runtime integration without editing app source files.
+- Connects to your Cloud Brain (defaults to the hosted URL)
+- Calls `POST /api/agents/enroll` and stores the returned session ID
+- Asks which project folders to watch
+- Optionally configures Windows startup
+- Detects Node projects and optionally installs `@wahid7852/trawld-runtime-node`
 
 ## Commands
 
 ```bash
-sentry-agent setup
-sentry-agent setup --cloud https://your-cloud.example.com
-sentry-agent enroll --cloud https://your-cloud.example.com
-sentry-agent start
-sentry-agent status
-sentry-agent config
-sentry-agent config set-session <session-id>
-sentry-agent config set-cloud-http https://your-cloud.example.com
-sentry-agent install-service
-sentry-agent uninstall-service
+trawld setup
+trawld setup --cloud https://your-cloud.vercel.app
+trawld enroll --cloud https://your-cloud.vercel.app
+trawld start
+trawld status
+trawld config
+trawld config path
+trawld config add-watch-root <path>
+trawld config remove-watch-root <path>
+trawld config set-cloud-http <url>
+trawld config set-cloud-ws <url>
+trawld config set-session <session-id>
+trawld install-service
+trawld uninstall-service
 ```
 
 ## Config
 
-The config is root-based rather than project-entry based:
-
 ```json
 {
-  "machineId": "machine-generated-on-first-run",
+  "machineId": "generated-on-first-run",
   "cloud": {
-    "http": "https://your-sentry-cloud.vercel.app",
+    "http": "https://trawld-dashboard.vercel.app",
     "ws": "",
-    "agentSessionId": "random-session-id-from-cloud"
+    "agentSessionId": "returned-by-cloud"
   },
   "watchRoots": [
-    "C:\\Users\\you\\Desktop\\projects",
-    "C:\\Users\\you\\source"
+    "C:\\Users\\you\\Desktop\\projects"
   ],
   "ignorePatterns": [
     "**/node_modules/**",
@@ -75,129 +64,60 @@ The config is root-based rather than project-entry based:
     "rescanIntervalMs": 300000,
     "rescanOnStart": true,
     "manifestWatch": true
-  },
-  "policy": {
-    "critical": "kill",
-    "high": "block",
-    "medium": "alert",
-    "low": "log"
   }
 }
 ```
 
-Existing `monitoredProjects` configs remain supported as a migration path, but new installs should use `watchRoots`.
+## How Enrollment Works
 
-## Open Enrollment Guide
+Open enrollment - no shared token required:
 
-The agent uses open enrollment in v1. There is no shared enrollment token and no bearer-token authorization requirement for machine/package uploads.
+1. Agent sends machine metadata to `/api/agents/enroll`
+2. Cloud Brain creates or updates the enrolled-agent record
+3. Cloud Brain returns a random session ID
+4. Agent stores the session ID locally
+5. All future payloads (inventory, heartbeat) include machine ID
 
-End user:
-
-```bash
-sentry-agent setup
-```
-
-or non-interactive:
-
-```bash
-sentry-agent enroll --cloud https://your-sentry-cloud.vercel.app
-```
-
-Flow:
-
-1. The agent sends machine metadata to `/api/agents/enroll`.
-2. The Cloud Brain creates or updates an enrolled-agent record.
-3. The Cloud Brain returns a random agent session id.
-4. The agent stores that session id in local config.
-5. Future exports send machine id, project, package, and heartbeat payloads directly to the Cloud Brain.
-
-Operationally, this means:
-
-- Setup is simpler because users only need the Cloud Brain URL and watched roots.
-- Public Cloud Brain ingestion is writable by anyone who can reach the API.
-- Revoke one machine id from the dashboard/API when that machine should stop reporting.
-- If abuse becomes a concern, add invite tokens, signed enrollment links, IP allowlists, or per-user accounts later.
+If a machine is lost or should stop reporting, revoke its ID from the dashboard.
 
 ## Passive Discovery
 
-The agent discovers projects by scanning configured roots for supported manifest files.
-
-Supported ecosystems in v1:
+The agent scans watched roots for supported manifest files:
 
 - npm: `package.json`, `package-lock.json`, `pnpm-lock.yaml`, `yarn.lock`
 - PyPI: `requirements.txt`, `pyproject.toml`
 
-The agent avoids broad whole-disk scanning. Users explicitly choose roots such as:
+Users pick explicit roots (e.g. `C:\Users\you\projects`) - no whole-disk scanning.
 
-```text
-C:\Users\you\Desktop\projects
-C:\Users\you\source
-D:\client-work
-```
+## Automatic Behaviour
 
-## Automation
+Once running, the agent:
 
-After setup, the agent can run as a foreground process or Windows startup task/service.
-
-Automatic behavior:
-
-- Startup rescan of watched roots.
-- Manifest-change rescans.
-- Scheduled rescans every five minutes by default.
-- Batch inventory export after root scans.
-- Snapshot-hash dedupe so unchanged projects are skipped locally.
-- HTTP heartbeat every fifteen seconds by default, with jitter to avoid synchronized reporting.
-- Local runtime-hook listener on `127.0.0.1:7654`.
-
-Heartbeat payloads let the Vercel-hosted dashboard show online/offline state without relying on long-running hosted WebSockets.
-
-## Optional Runtime Integration
-
-During setup, the agent can detect Node projects and ask whether to install the optional hook.
-
-If accepted, it installs:
-
-```bash
-npm install @wahid7852/sentry-runtime-node
-```
-
-or uses pnpm/yarn when a matching lockfile exists. It does not edit application entry files. Users should add:
-
-```js
-import "@wahid7852/sentry-runtime-node";
-```
-
-as the first import when they want PID-aware runtime telemetry.
+- Rescans watched roots on startup
+- Watches for manifest file changes
+- Rescans every 5 minutes by default
+- Sends heartbeats every 15 seconds (jittered)
+- Skips unchanged project snapshots (hash deduplication)
+- Listens for optional runtime hooks on `127.0.0.1:7654`
 
 ## Windows Startup
 
-Windows is the first-class background target for v1.
-
 ```bash
-sentry-agent install-service
-sentry-agent uninstall-service
+trawld install-service
+trawld uninstall-service
 ```
 
-Use `sentry-agent start` for foreground debugging before installing background startup.
+Use `trawld start` for foreground testing before installing the background task.
 
-## Status and Troubleshooting
+## Troubleshooting
 
 ```bash
-sentry-agent status
+trawld status
 ```
 
-Check:
-
-- Machine ID exists.
-- Cloud HTTP URL is correct.
-- Agent session id is present.
-- Cloud status endpoint succeeds.
-- Watched roots exist.
-- Last export time is recent.
-- Heartbeats are reaching the dashboard.
+Checks: machine ID, cloud URL, session ID, cloud reachability, watched roots, last export time, heartbeat status.
 
 Common issues:
-
-- `403` after setup: the machine id was revoked by the Cloud Brain.
-- Dashboard offline: heartbeat loop is not running or the Cloud URL is unreachable.
-- No projects discovered: watched roots are too narrow or ignored by pattern.
+- `403` after setup: machine ID was revoked from the dashboard
+- Dashboard shows offline: heartbeat loop stopped or Cloud URL unreachable
+- No projects discovered: watched roots too narrow or excluded by ignore patterns

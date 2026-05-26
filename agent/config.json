@@ -1,6 +1,6 @@
 {
   "cloud": {
-    "http": "https://your-sentry-cloud.vercel.app",
+    "http": "https://trawld-dashboard.vercel.app",
     "ws": "",
     "agentSessionId": ""
   },

@@ -14,14 +14,14 @@ import { WebSocket } from "ws";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
-const AGENT_NAME = "sentry-agent";
-const DEFAULT_HOSTED_CLOUD_HTTP = process.env.SENTRY_DEFAULT_CLOUD_HTTP || "https://your-sentry-cloud.vercel.app";
+const AGENT_NAME = "trawld";
+const DEFAULT_HOSTED_CLOUD_HTTP = process.env.TRAWLD_DEFAULT_CLOUD_HTTP || "https://trawld-dashboard.vercel.app";
 const DEFAULT_CLOUD_HTTP = process.env.CLOUD_HTTP || DEFAULT_HOSTED_CLOUD_HTTP;
 const DEFAULT_CLOUD_WS = process.env.CLOUD_WS || "";
-const RUNTIME_PACKAGE_NAME = "@wahid7852/sentry-runtime-node";
+const RUNTIME_PACKAGE_NAME = "@wahid7852/trawld-runtime-node";
 const LEGACY_CONFIG_PATH = path.join(__dirname, "config.json");
 const AGENT_HOME =
-  process.env.SENTRY_AGENT_HOME ||
+  process.env.TRAWLD_AGENT_HOME ||
   (process.platform === "win32" && process.env.APPDATA
     ? path.join(process.env.APPDATA, AGENT_NAME)
     : path.join(os.homedir(), `.${AGENT_NAME}`));
@@ -41,7 +41,7 @@ const DEFAULT_IGNORE_PATTERNS = [
   "venv",
   "__pycache__"
 ];
-const SERVICE_TASK_NAME = "SentryAgent";
+const SERVICE_TASK_NAME = "TrawldAgent";
 const DEFAULT_AUTOMATION = {
   heartbeatIntervalMs: 15000,
   rescanIntervalMs: 5 * 60 * 1000,
@@ -123,7 +123,7 @@ function buildDefaultConfig() {
     cloud: {
       http: DEFAULT_CLOUD_HTTP,
       ws: DEFAULT_CLOUD_WS,
-      agentSessionId: process.env.SENTRY_AGENT_SESSION_ID || ""
+      agentSessionId: process.env.TRAWLD_AGENT_SESSION_ID || ""
     },
     policy: {
       critical: "kill",
@@ -802,8 +802,8 @@ function getCloudConfig() {
     http: process.env.CLOUD_HTTP || config.cloud?.http || DEFAULT_CLOUD_HTTP,
     ws: process.env.CLOUD_WS || config.cloud?.ws || DEFAULT_CLOUD_WS,
     agentSessionId:
-      process.env.SENTRY_AGENT_SESSION_ID ||
-      process.env.SENTRY_AGENT_TOKEN ||
+      process.env.TRAWLD_AGENT_SESSION_ID ||
+      process.env.TRAWLD_AGENT_TOKEN ||
       config.cloud?.agentSessionId ||
       config.cloud?.agentToken ||
       ""
@@ -1487,22 +1487,22 @@ async function sendHttpHeartbeat() {
 
 function printUsage() {
   console.log(`
-Sentry Agent
+trawld
 
 Usage:
-  sentry-agent setup [--cloud <url>]
-  sentry-agent start
-  sentry-agent status
-  sentry-agent enroll [--cloud <url>] [--label <label>]
-  sentry-agent config
-  sentry-agent config path
-  sentry-agent config add-watch-root <path>
-  sentry-agent config remove-watch-root <path>
-  sentry-agent config set-cloud-http <url>
-  sentry-agent config set-cloud-ws <url>
-  sentry-agent config set-session <session-id>
-  sentry-agent install-service
-  sentry-agent uninstall-service
+  trawld setup [--cloud <url>]
+  trawld start
+  trawld status
+  trawld enroll [--cloud <url>] [--label <label>]
+  trawld config
+  trawld config path
+  trawld config add-watch-root <path>
+  trawld config remove-watch-root <path>
+  trawld config set-cloud-http <url>
+  trawld config set-cloud-ws <url>
+  trawld config set-session <session-id>
+  trawld install-service
+  trawld uninstall-service
 `);
 }
 
@@ -1515,7 +1515,7 @@ async function runSetup(args = []) {
   });
 
   try {
-    console.log("Sentry Agent setup");
+    console.log("trawld setup");
     console.log(`Config path: ${CONFIG_PATH}`);
 
     const defaultRoots = current.watchRoots.length > 0 ? current.watchRoots : getDefaultWatchRoots();

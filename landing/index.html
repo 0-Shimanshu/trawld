@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>trawld — Package vulnerability monitoring for developer fleets</title>
+  <title>trawld - Package vulnerability monitoring for developer fleets</title>
   <meta name="description" content="trawld monitors every machine on your team, scans packages against the OSV database, and surfaces vulnerable dependencies before they reach production.">
   <link rel="stylesheet" href="style.css">
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -20,10 +20,10 @@
   <div class="nav-links">
     <a href="#how-it-works">How it works</a>
     <a href="#features">Features</a>
-    <a href="https://github.com/Wahid7852/Sentry" target="_blank" rel="noopener">GitHub</a>
+    <a href="https://github.com/Wahid7852/trawld" target="_blank" rel="noopener">GitHub</a>
   </div>
   <div class="nav-actions">
-    <a class="btn-ghost" href="https://github.com/Wahid7852/Sentry" target="_blank" rel="noopener">
+    <a class="btn-ghost" href="https://github.com/Wahid7852/trawld" target="_blank" rel="noopener">
       <svg width="13" height="13" fill="currentColor" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
       GitHub
     </a>
@@ -40,7 +40,7 @@
     and surfaces vulnerable dependencies before they reach production.
   </p>
   <div class="hero-actions">
-    <a class="btn-big" href="https://github.com/Wahid7852/Sentry" target="_blank" rel="noopener">
+    <a class="btn-big" href="https://github.com/Wahid7852/trawld" target="_blank" rel="noopener">
       <svg width="13" height="13" fill="currentColor" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
       View on GitHub
     </a>
@@ -59,7 +59,7 @@
 <span class="t-green">$</span> npm install -g @wahid7852/trawld-agent
 
 <span class="t-green">$</span> trawld setup
-  <span class="t-green">✔</span> Connected to cloud at https://trawld.vercel.app
+  <span class="t-green">✔</span> Connected to cloud at https://trawld-dashboard.vercel.app
   <span class="t-green">✔</span> Watching 3 project roots
   <span class="t-green">✔</span> Enrolled as dev-machine-01 · 420 packages indexed
   <span class="t-warn">⚠</span> 2 critical findings · open dashboard to review</div>
@@ -95,7 +95,7 @@
     <div class="step">
       <p class="step-num">01 / deploy</p>
       <h3>Deploy the cloud brain</h3>
-      <p>One-click Vercel deploy. Point it at a MongoDB database and you're done — it serves the dashboard and accepts agent connections.</p>
+      <p>One-click Vercel deploy. Point it at a MongoDB database and you're done - it serves the dashboard and accepts agent connections.</p>
       <div class="step-code">vercel deploy ./cloud</div>
     </div>
     <div class="step">
@@ -154,7 +154,7 @@ trawld setup</div>
       <div class="dot dot-r"></div>
       <div class="dot dot-y"></div>
       <div class="dot dot-g"></div>
-      <div class="preview-url">https://trawld.vercel.app</div>
+      <div class="preview-url">https://trawld-dashboard.vercel.app</div>
     </div>
     <div class="preview-body">
       <div class="preview-sidebar">
@@ -196,7 +196,7 @@ trawld setup</div>
 <footer>
   <span class="footer-logo">trawld</span>
   <div class="footer-links">
-    <a href="https://github.com/Wahid7852/Sentry" target="_blank" rel="noopener">GitHub</a>
+    <a href="https://github.com/Wahid7852/trawld" target="_blank" rel="noopener">GitHub</a>
     <a href="https://www.npmjs.com/package/@wahid7852/trawld-agent" target="_blank" rel="noopener">npm</a>
   </div>
   <span class="footer-right">MIT License · built by Wahid Khan</span>

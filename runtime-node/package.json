@@ -1,21 +1,21 @@
 {
   "name": "@wahid7852/trawld-runtime-node",
   "version": "0.1.0",
-  "description": "Optional Node.js runtime hook for trawld — registers the current process with the local agent",
+  "description": "Optional Node.js runtime hook for trawld - registers the current process with the local agent",
   "keywords": [
-    "sentry",
+    "trawld",
     "runtime-hook",
-    "supply-chain-security",
+    "vulnerability-monitoring",
     "dependency-scanning",
     "nodejs"
   ],
   "homepage": "https://www.npmjs.com/package/@wahid7852/trawld-runtime-node",
   "bugs": {
-    "url": "https://github.com/Wahid7852/vuln-mitigate/issues"
+    "url": "https://github.com/Wahid7852/trawld/issues"
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/Wahid7852/vuln-mitigate.git",
+    "url": "git+https://github.com/Wahid7852/trawld.git",
     "directory": "runtime-node"
   },
   "license": "MIT",

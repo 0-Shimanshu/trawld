@@ -1,18 +1,18 @@
 # trawld
 
-Package vulnerability monitoring for developer fleets. trawld watches every enrolled machine, discovers projects automatically, and surfaces vulnerable dependencies in a real-time dashboard — no code changes to your apps required.
+Package vulnerability monitoring for developer fleets. trawld watches every enrolled machine, discovers projects automatically, and surfaces vulnerable dependencies in a real-time dashboard - no code changes to your apps required.
 
 ## How it works
 
 1. Deploy the Cloud Brain once (Vercel + MongoDB).
 2. Enroll machines by running `trawld setup`.
-3. Open the dashboard — packages are indexed, vulnerabilities matched against the OSV database, and heartbeats keep online/offline status live.
+3. Open the dashboard - packages are indexed, vulnerabilities matched against the OSV database, and heartbeats keep online/offline status live.
 
 ## Components
 
-- **[Cloud Brain](cloud/README.md)** — React dashboard + REST API, deploys to Vercel, persists to MongoDB.
-- **[trawld Agent](agent/README.md)** — global npm package, setup wizard, passive project discovery, scheduled rescans, heartbeats.
-- **[Runtime Node Hook](runtime-node/README.md)** — optional package for PID-aware process registration inside Node apps.
+- **[Cloud Brain](cloud/README.md)** - React dashboard + REST API, deploys to Vercel, persists to MongoDB.
+- **[trawld Agent](agent/README.md)** - global npm package, setup wizard, passive project discovery, scheduled rescans, heartbeats.
+- **[Runtime Node Hook](runtime-node/README.md)** - optional package for PID-aware process registration inside Node apps.
 
 ## Architecture
 
@@ -49,7 +49,7 @@ npm install -g @wahid7852/trawld-agent
 trawld setup
 ```
 
-The setup wizard connects to your Cloud Brain, picks project folders to watch, and optionally configures startup. Done — the machine appears in your dashboard.
+The setup wizard connects to your Cloud Brain, picks project folders to watch, and optionally configures startup. Done - the machine appears in your dashboard.
 
 ## Open Enrollment
 
@@ -80,7 +80,7 @@ After setup the agent runs continuously:
 - Manifest-change rescans (`package.json`, `requirements.txt`)
 - Scheduled rescans every 5 minutes
 - Heartbeats every 15 seconds (jittered)
-- Snapshot hash deduplication — unchanged projects don't re-upload
+- Snapshot hash deduplication - unchanged projects don't re-upload
 
 ## Repository Layout
 
@@ -107,4 +107,4 @@ cd ../runtime-node && npm pack --dry-run
 
 ## License
 
-MIT — built by [Wahid Khan](https://github.com/Wahid7852)
+MIT - built by [Wahid Khan](https://github.com/Wahid7852)

@@ -35,7 +35,7 @@ const commands = [
       ...process.env,
       CLOUD_HTTP: localCloudHttp,
       CLOUD_WS: localCloudWs,
-      SENTRY_DEFAULT_CLOUD_HTTP: localCloudHttp
+      TRAWLD_DEFAULT_CLOUD_HTTP: localCloudHttp
     }
   }
 ];

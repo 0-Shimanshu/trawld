@@ -20,7 +20,7 @@ const HOST = process.env.HOST || "127.0.0.1";
 const WS_PATH = "/agents";
 const REALTIME_MODE = process.env.REALTIME_MODE || (IS_VERCEL ? "http" : "websocket");
 const MONGODB_URI = process.env.MONGODB_URI || "";
-const DATABASE_NAME = process.env.DATABASE_NAME || "sentry";
+const DATABASE_NAME = process.env.DATABASE_NAME || "trawld";
 const PUBLIC_DIR = path.join(__dirname, "public");
 const PUBLIC_INDEX = path.join(PUBLIC_DIR, "index.html");
 const PUBLIC_CLOUD_URL = process.env.PUBLIC_CLOUD_URL || `http://${HOST === "0.0.0.0" ? "localhost" : HOST}:${PORT}`;
