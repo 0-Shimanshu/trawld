@@ -1,36 +1,27 @@
 {
-  "name": "@wahid7852/sentry-agent",
+  "name": "@wahid7852/trawld-agent",
   "version": "0.1.0",
-  "description": "Global local agent for Sentry that discovers project manifests, exports package inventory, and connects machines to the cloud brain",
+  "description": "Global local agent for trawld that discovers project manifests, exports package inventory, and connects machines to the cloud",
   "type": "module",
   "main": "index.js",
   "bin": {
-    "sentry-agent": "./index.js"
+    "trawld": "./index.js"
   },
-  "homepage": "https://www.npmjs.com/package/@wahid7852/sentry-agent",
+  "homepage": "https://www.npmjs.com/package/@wahid7852/trawld-agent",
   "bugs": {
-    "url": "https://github.com/Wahid7852/vuln-mitigate/issues"
+    "url": "https://github.com/Wahid7852/Sentry/issues"
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/Wahid7852/vuln-mitigate.git",
+    "url": "git+https://github.com/Wahid7852/Sentry.git",
     "directory": "agent"
   },
   "license": "MIT",
   "author": "Wahid7852",
-  "files": [
-    "index.js",
-    "README.md"
-  ],
-  "scripts": {
-    "start": "node index.js"
-  },
-  "engines": {
-    "node": ">=18"
-  },
-  "publishConfig": {
-    "access": "public"
-  },
+  "files": ["index.js", "README.md"],
+  "scripts": { "start": "node index.js" },
+  "engines": { "node": ">=18" },
+  "publishConfig": { "access": "public" },
   "dependencies": {
     "express": "^5.2.1",
     "node-fetch": "^3.3.2",

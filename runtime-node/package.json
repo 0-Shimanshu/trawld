@@ -1,7 +1,7 @@
 {
-  "name": "@wahid7852/sentry-runtime-node",
+  "name": "@wahid7852/trawld-runtime-node",
   "version": "0.1.0",
-  "description": "Project-scoped runtime hook for Sentry Node.js applications that reports inventory to the local Sentry agent",
+  "description": "Optional Node.js runtime hook for trawld — registers the current process with the local agent",
   "keywords": [
     "sentry",
     "runtime-hook",
@@ -9,7 +9,7 @@
     "dependency-scanning",
     "nodejs"
   ],
-  "homepage": "https://www.npmjs.com/package/@wahid7852/sentry-runtime-node",
+  "homepage": "https://www.npmjs.com/package/@wahid7852/trawld-runtime-node",
   "bugs": {
     "url": "https://github.com/Wahid7852/vuln-mitigate/issues"
   },
