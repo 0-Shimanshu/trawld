@@ -8,6 +8,11 @@ import useOverviewData from '../hooks/useOverviewData'
 const SEV_COLOR = { critical: 'text-tr-red', high: 'text-tr-yellow', medium: 'text-tr-blue', low: 'text-tr-dim' }
 const SEV_DOT   = { critical: 'bg-tr-red',  high: 'bg-tr-yellow',   medium: 'bg-tr-blue',  low: 'bg-[#3d444d]' }
 
+function isOnline(m) {
+  if (!m.last_seen) return false
+  return (Date.now() - new Date(m.last_seen).getTime()) / 1000 < 45
+}
+
 function getTimeAgo(dateStr) {
   const diff = (Date.now() - new Date(dateStr).getTime()) / 1000
   if (diff < 60) return 'just now'
@@ -28,7 +33,7 @@ export default function OverviewPage() {
 
   const openAlerts     = alerts.filter((a) => a.status !== 'ack')
   const criticalAlerts = openAlerts.filter((a) => a.severity === 'critical')
-  const onlineMachines = machines.filter((m) => m.online)
+  const onlineMachines = machines.filter(isOnline)
 
   const lastSyncAgo = systemInfo.last_updated ? getTimeAgo(systemInfo.last_updated) : '—'
 
@@ -143,8 +148,8 @@ export default function OverviewPage() {
                         {m.os || '—'} · {m.project_count || 0} projects · {m.package_count || 0} pkgs
                       </p>
                     </div>
-                    <span className={`status-badge ${m.online ? 'badge-green' : 'badge-red'}`}>
-                      {m.online ? 'online' : 'offline'}
+                    <span className={`status-badge ${isOnline(m) ? 'badge-green' : 'badge-red'}`}>
+                      {isOnline(m) ? 'online' : 'offline'}
                     </span>
                   </button>
                 ))

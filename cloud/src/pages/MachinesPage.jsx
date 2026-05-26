@@ -4,6 +4,11 @@ import { scanMachine } from '../api/machines'
 import useAppShell from '../hooks/useAppShell'
 import useMachines from '../hooks/useMachines'
 
+function isOnline(m) {
+  if (!m.last_seen) return false
+  return (Date.now() - new Date(m.last_seen).getTime()) / 1000 < 45
+}
+
 function getTimeAgo(dateStr) {
   if (!dateStr) return '—'
   const diff = (Date.now() - new Date(dateStr).getTime()) / 1000
@@ -70,8 +75,8 @@ export default function MachinesPage() {
                     <p className="text-[13px] font-semibold text-tr-text truncate">{m.hostname || m.uuid}</p>
                     <p className="text-[10px] text-tr-dim mt-0.5 truncate">{m.os || '—'} · {getTimeAgo(m.last_seen)}</p>
                   </div>
-                  <span className={`status-badge shrink-0 ml-2 ${m.online ? 'badge-green' : 'badge-red'}`}>
-                    {m.online ? 'online' : 'offline'}
+                  <span className={`status-badge shrink-0 ml-2 ${isOnline(m) ? 'badge-green' : 'badge-red'}`}>
+                    {isOnline(m) ? 'online' : 'offline'}
                   </span>
                 </div>
 

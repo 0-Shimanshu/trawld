@@ -7,9 +7,14 @@ const NAV = [
   { to: '/packages',  label: 'Packages'  },
 ]
 
+function isOnline(m) {
+  if (!m.last_seen) return false
+  return (Date.now() - new Date(m.last_seen).getTime()) / 1000 < 45
+}
+
 export default function Sidebar({ summary, wsConnected }) {
   const openAlerts = (summary?.alerts || []).filter((a) => a.status !== 'ack').length
-  const onlineMachines = (summary?.machines || []).filter((m) => m.online).length
+  const onlineMachines = (summary?.machines || []).filter(isOnline).length
 
   return (
     <aside className="w-[200px] shrink-0 bg-tr-surface border-r border-tr-border flex flex-col min-h-screen sticky top-0">
