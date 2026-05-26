@@ -805,7 +805,7 @@ async function touchAgent(machineId, updates = {}) {
   return next;
 }
 
-async function updateAgentRealtimeStatus(machineId, payload = {}) {
+async function updateAgentRealtimeStatus(machineId, payload = {}, { silent = false } = {}) {
   if (!machineId) return null;
   if (!state.enrolledAgents.has(machineId)) {
     await persistAgent({
@@ -839,7 +839,7 @@ async function updateAgentRealtimeStatus(machineId, payload = {}) {
     Object.entries(updates).filter(([_key, value]) => value !== undefined)
   );
   const agent = await touchAgent(machineId, cleanUpdates);
-  if (agent) {
+  if (agent && !silent) {
     broadcastDashboard({ type: "AGENT_STATUS_UPDATE", agent: sanitizeAgent(agent) });
   }
   return agent;
@@ -1082,7 +1082,7 @@ app.post("/api/agents/heartbeat", attachAgentSession, async (req, res) => {
       http_heartbeat: true,
       observed_at: payload.status?.observed_at || new Date().toISOString()
     }
-  });
+  }, { silent: wasOnline });
 
   // Only bump stateVersion when machine transitions offline→online (not every 15s heartbeat)
   if (!wasOnline) {
@@ -1155,6 +1155,25 @@ app.post("/api/agents/:id/revoke", async (req, res) => {
   const socket = state.agentSockets.get(machineId);
   if (socket && socket.readyState === 1) socket.close(1008, "agent revoked");
   broadcastDashboard({ type: "AGENT_STATUS_UPDATE", agent: sanitizeAgent(next) });
+  res.json({ ok: true });
+});
+
+app.post("/api/agents/remediation-report", attachAgentSession, async (req, res) => {
+  const { alert_id, success, output, error_message } = req.body || {};
+  if (!alert_id) return res.status(400).json({ error: "alert_id required" });
+
+  const alert = state.alerts.find((a) => a.id === alert_id);
+  if (!alert) return res.status(404).json({ error: "alert not found" });
+
+  alert.remediation_result = {
+    success: !!success,
+    output: output || "",
+    error_message: error_message || null,
+    completed_at: new Date().toISOString()
+  };
+  alert.updated_at = alert.remediation_result.completed_at;
+  await persistAlert(alert);
+  broadcastDashboard({ type: "ALERT_UPDATE", alert });
   res.json({ ok: true });
 });
 
@@ -1604,7 +1623,7 @@ function attachWebSocketServer(server) {
           os: data.os
         });
         await persistMachine(machine);
-        await updateAgentRealtimeStatus(machineId, data);
+        await updateAgentRealtimeStatus(machineId, data, { silent: wasOnlineWs });
         if (!wasOnlineWs) {
           broadcastDashboard({ type: "MACHINE_UPDATE", machine: buildMachineSummary(machineId) });
         }

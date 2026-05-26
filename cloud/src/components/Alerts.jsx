@@ -8,6 +8,38 @@ const SEV_STYLE = {
   low:      { badge: 'badge-gray'   },
 }
 
+function RemediationLog({ alert }) {
+  const result = alert.remediation_result
+  const pending = !result && alert.remediation_requested_at
+
+  if (!pending && !result) return null
+
+  if (pending) {
+    return (
+      <div className="px-4 py-2.5 bg-[#0d1117] border-t border-tr-border font-mono text-[10px] text-tr-dim flex items-center gap-2">
+        <span className="inline-block w-1.5 h-1.5 rounded-full bg-tr-yellow animate-pulse" />
+        Queued — waiting for agent to pick up on next heartbeat…
+      </div>
+    )
+  }
+
+  return (
+    <div className="px-4 py-2.5 bg-[#0d1117] border-t border-tr-border font-mono text-[10px]">
+      <div className={`flex items-center gap-2 mb-1.5 ${result.success ? 'text-tr-green' : 'text-tr-red'}`}>
+        <span>{result.success ? '✓' : '✗'}</span>
+        <span>{result.success ? 'Remediation complete' : 'Remediation failed'}</span>
+        <span className="text-tr-dim ml-auto">{new Date(result.completed_at).toLocaleTimeString()}</span>
+      </div>
+      {result.output && (
+        <pre className="text-tr-dim whitespace-pre-wrap break-all leading-relaxed max-h-40 overflow-y-auto">{result.output}</pre>
+      )}
+      {result.error_message && (
+        <pre className="text-tr-red whitespace-pre-wrap break-all leading-relaxed">{result.error_message}</pre>
+      )}
+    </div>
+  )
+}
+
 export default function Alerts({ data, loading, onChange }) {
   const [query, setQuery]       = useState('')
   const [severity, setSeverity] = useState('all')
@@ -97,50 +129,60 @@ export default function Alerts({ data, loading, onChange }) {
                 ) : (
                   alerts.map((a) => {
                     const sev = SEV_STYLE[a.severity] || SEV_STYLE.low
+                    const hasLog = a.remediation_result || a.remediation_requested_at
                     return (
-                      <tr key={a.id} className="hover:bg-[#1c2128] transition-colors">
-                        <td className="px-4 py-2.5">
-                          <span className={`status-badge ${sev.badge}`}>{a.severity || '—'}</span>
-                        </td>
-                        <td className="px-4 py-2.5">
-                          <p className="text-tr-text font-medium">{a.package?.name}</p>
-                          <p className="text-[10px] text-tr-dim">{a.package?.ecosystem} · v{a.package?.version}</p>
-                        </td>
-                        <td className="px-4 py-2.5">
-                          <p className="text-tr-text">{a.project_name || a.project_id}</p>
-                          <p className="text-[10px] text-tr-dim">{a.machine_id}</p>
-                        </td>
-                        <td className="px-4 py-2.5">
-                          <span className="text-tr-blue font-mono text-[10px]">{a.cve_id || a.osv_id || '—'}</span>
-                        </td>
-                        <td className="px-4 py-2.5">
-                          <span className="text-tr-muted text-[10px]">{a.fix || '—'}</span>
-                        </td>
-                        <td className="px-4 py-2.5">
-                          <div className="flex gap-1.5">
-                            {a.fix && a.status !== 'ack' && (
-                              <button
-                                className="btn text-[10px] py-1 px-2"
-                                disabled={busyId === a.id}
-                                onClick={() => remediateAlert(a.id)}
-                              >
-                                {busyId === a.id ? '…' : 'Auto Update'}
-                              </button>
-                            )}
-                            {a.status !== 'ack' && (
-                              <button
-                                className="btn text-[10px] py-1 px-2"
-                                onClick={() => ackAlert(a.id)}
-                              >
-                                Resolve
-                              </button>
-                            )}
-                            {a.status === 'ack' && (
-                              <span className="text-[10px] text-tr-dim">Resolved</span>
-                            )}
-                          </div>
-                        </td>
-                      </tr>
+                      <>
+                        <tr key={a.id} className="hover:bg-[#1c2128] transition-colors">
+                          <td className="px-4 py-2.5">
+                            <span className={`status-badge ${sev.badge}`}>{a.severity || '—'}</span>
+                          </td>
+                          <td className="px-4 py-2.5">
+                            <p className="text-tr-text font-medium">{a.package?.name}</p>
+                            <p className="text-[10px] text-tr-dim">{a.package?.ecosystem} · v{a.package?.version}</p>
+                          </td>
+                          <td className="px-4 py-2.5">
+                            <p className="text-tr-text">{a.project_name || a.project_id}</p>
+                            <p className="text-[10px] text-tr-dim">{a.machine_id}</p>
+                          </td>
+                          <td className="px-4 py-2.5">
+                            <span className="text-tr-blue font-mono text-[10px]">{a.cve_id || a.osv_id || '—'}</span>
+                          </td>
+                          <td className="px-4 py-2.5">
+                            <span className="text-tr-muted text-[10px]">{a.fix || '—'}</span>
+                          </td>
+                          <td className="px-4 py-2.5">
+                            <div className="flex gap-1.5">
+                              {a.fix && a.status !== 'ack' && (
+                                <button
+                                  className="btn text-[10px] py-1 px-2"
+                                  disabled={busyId === a.id}
+                                  onClick={() => remediateAlert(a.id)}
+                                >
+                                  {busyId === a.id ? '…' : 'Auto Update'}
+                                </button>
+                              )}
+                              {a.status !== 'ack' && (
+                                <button
+                                  className="btn text-[10px] py-1 px-2"
+                                  onClick={() => ackAlert(a.id)}
+                                >
+                                  Resolve
+                                </button>
+                              )}
+                              {a.status === 'ack' && (
+                                <span className="text-[10px] text-tr-dim">Resolved</span>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                        {hasLog && (
+                          <tr key={`${a.id}-log`}>
+                            <td colSpan={6} className="p-0">
+                              <RemediationLog alert={a} />
+                            </td>
+                          </tr>
+                        )}
+                      </>
                     )
                   })
                 )}

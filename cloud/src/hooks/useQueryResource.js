@@ -7,7 +7,7 @@ export default function useQueryResource(loader, deps = []) {
 
   const run = useEffectEvent(async () => {
     try {
-      setLoading(true)
+      if (data === null) setLoading(true)
       setError('')
       const next = await loader()
       setData(next)

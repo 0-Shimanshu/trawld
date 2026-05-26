@@ -1339,16 +1339,22 @@ async function remediateProjectDependency(projectId, packageName, fixVersion) {
   const manager = project.package_manager || detectPackageManager(project.root);
   logAction(`REMEDIATE project=${project.label} manager=${manager} package=${packageName} fix=${fixVersion}`);
 
+  let cmdOutput = "";
   if (manager === "npm") {
-    await runProjectCommand("npm", ["install", `${packageName}@${fixVersion}`], project.root);
+    const r = await runProjectCommand("npm", ["install", `${packageName}@${fixVersion}`], project.root);
+    cmdOutput = [r.stdout, r.stderr].filter(Boolean).join("\n").trim();
   } else if (manager === "poetry") {
-    await runProjectCommand("poetry", ["add", `${packageName}@${fixVersion}`], project.root);
+    const r = await runProjectCommand("poetry", ["add", `${packageName}@${fixVersion}`], project.root);
+    cmdOutput = [r.stdout, r.stderr].filter(Boolean).join("\n").trim();
   } else if (manager === "pipenv") {
-    await runProjectCommand("pipenv", ["install", `${packageName}==${fixVersion}`], project.root);
+    const r = await runProjectCommand("pipenv", ["install", `${packageName}==${fixVersion}`], project.root);
+    cmdOutput = [r.stdout, r.stderr].filter(Boolean).join("\n").trim();
   } else if (manager === "requirements") {
     updateRequirementsFile(project.root, packageName, fixVersion);
+    cmdOutput = `Updated ${packageName} to ${fixVersion} in requirements.txt`;
   } else if (manager === "pyproject") {
     updatePyprojectDependency(project.root, packageName, fixVersion);
+    cmdOutput = `Updated ${packageName} to ${fixVersion} in pyproject.toml`;
   } else {
     throw new Error(`automatic remediation is not supported for package manager "${manager}"`);
   }
@@ -1356,6 +1362,7 @@ async function remediateProjectDependency(projectId, packageName, fixVersion) {
   const scanResult = await scanProjectById(projectId, "remediation");
   return {
     ok: true,
+    output: cmdOutput,
     package_manager: manager,
     scan: scanResult
   };
@@ -1486,6 +1493,25 @@ function buildAgentStatusPayload() {
   };
 }
 
+async function postRemediationReport(alertId, success, output, errorMessage) {
+  if (!alertId) return;
+  const cloud = getCloudConfig();
+  try {
+    await fetch(`${cloud.http.replace(/\/$/, "")}/api/agents/remediation-report`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        alert_id: alertId,
+        success,
+        output: output || "",
+        error_message: errorMessage || null
+      })
+    });
+  } catch (error) {
+    logAction(`remediation-report failed message=${error.message}`);
+  }
+}
+
 function handleAgentCommand(message) {
   if (message.type === "CVE_ALERT" && message.package) {
     cacheAlert(message);
@@ -1495,16 +1521,19 @@ function handleAgentCommand(message) {
     enforceMatchingProcesses(message);
   }
   if (message.type === "REMEDIATE_PACKAGE") {
+    const alertId = message.alert_id;
     remediateProjectDependency(message.project_id, message.package?.name, message.fix_version)
-      .then(() => {
+      .then(({ output }) => {
         logAction(
           `REMEDIATE complete project=${message.project_id} package=${message.package?.name} fix=${message.fix_version}`
         );
+        postRemediationReport(alertId, true, output, null);
       })
       .catch((error) => {
         logAction(
           `REMEDIATE failed project=${message.project_id} package=${message.package?.name} message=${error.message}`
         );
+        postRemediationReport(alertId, false, null, error.message);
       });
   }
 }
