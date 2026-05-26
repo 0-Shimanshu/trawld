@@ -1072,22 +1072,52 @@ app.post("/api/agents/heartbeat", attachAgentSession, async (req, res) => {
 });
 
 app.post("/api/agents/:id/revoke", async (req, res) => {
-  const agent = state.enrolledAgents.get(req.params.id);
+  const machineId = req.params.id;
+  let agent = state.enrolledAgents.get(machineId);
+
+  // Machine may exist without an agent enrollment record — synthesize one so it can be revoked
+  if (!agent && state.machines.has(machineId)) {
+    agent = { machine_id: machineId, revoked: false };
+  }
+
   if (!agent) {
     res.status(404).json({ error: "agent not found" });
     return;
   }
 
-  const next = {
-    ...agent,
-    revoked: true,
-    revoked_at: new Date().toISOString()
-  };
+  const next = { ...agent, revoked: true, revoked_at: new Date().toISOString() };
   await persistAgent(next);
-  const socket = state.agentSockets.get(agent.machine_id);
+
+  // Also delete machine and its projects/packages/alerts from DB so it never loads back
+  if (db) {
+    const projectIds = Array.from(state.projects.values())
+      .filter((p) => p.machine_id === machineId)
+      .map((p) => p.id);
+    await Promise.all([
+      db.collection("machines").deleteOne({ id: machineId }),
+      db.collection("projects").deleteMany({ machine_id: machineId }),
+      db.collection("project_packages").deleteMany({ machine_id: machineId }),
+      db.collection("project_snapshots").deleteMany({ machine_id: machineId }),
+      db.collection("alerts").deleteMany({ machine_id: machineId }),
+      ...projectIds.map((pid) => db.collection("project_packages").deleteMany({ project_id: pid }))
+    ]);
+  }
+
+  // Purge from in-memory state too
+  state.machines.delete(machineId);
+  for (const [projectId, project] of state.projects.entries()) {
+    if (project.machine_id === machineId) {
+      state.projects.delete(projectId);
+      state.projectPackages.delete(projectId);
+      state.projectSnapshots.delete(projectId);
+    }
+  }
+  state.alerts = state.alerts.filter((a) => a.machine_id !== machineId);
+
+  const socket = state.agentSockets.get(machineId);
   if (socket && socket.readyState === 1) socket.close(1008, "agent revoked");
   broadcastDashboard({ type: "AGENT_STATUS_UPDATE", agent: sanitizeAgent(next) });
-  res.json({ ok: true, agent: sanitizeAgent(next) });
+  res.json({ ok: true });
 });
 
 app.post("/register", attachAgentSession, async (req, res) => {
@@ -1318,6 +1348,49 @@ app.post("/check-package", async (req, res) => {
   }
 
   res.json({ ok: true, vulnerabilities_found: total });
+});
+
+app.post("/api/admin/flush", async (req, res) => {
+  // Wipe everything from MongoDB and reset in-memory state
+  // Optional: pass { keep_machine_id: "uuid" } to preserve one machine
+  const keepId = req.body?.keep_machine_id || null;
+
+  if (db) {
+    const collections = ["machines", "agents", "projects", "project_packages", "project_snapshots", "alerts", "cves", "osv_query_cache"];
+    if (keepId) {
+      // Delete everything EXCEPT the specified machine
+      await Promise.all([
+        db.collection("machines").deleteMany({ id: { $ne: keepId } }),
+        db.collection("agents").deleteMany({ machine_id: { $ne: keepId } }),
+        db.collection("projects").deleteMany({ machine_id: { $ne: keepId } }),
+        db.collection("project_packages").deleteMany({ machine_id: { $ne: keepId } }),
+        db.collection("project_snapshots").deleteMany({ machine_id: { $ne: keepId } }),
+        db.collection("alerts").deleteMany({ machine_id: { $ne: keepId } }),
+      ]);
+    } else {
+      await Promise.all(collections.map((col) => db.collection(col).deleteMany({})));
+    }
+  }
+
+  // Reset in-memory state
+  for (const [machineId] of state.machines.entries()) {
+    if (keepId && machineId === keepId) continue;
+    state.machines.delete(machineId);
+    state.enrolledAgents.delete(machineId);
+  }
+  for (const [projectId, project] of state.projects.entries()) {
+    if (keepId && project.machine_id === keepId) continue;
+    state.projects.delete(projectId);
+    state.projectPackages.delete(projectId);
+    state.projectSnapshots.delete(projectId);
+  }
+  state.alerts = keepId ? state.alerts.filter((a) => a.machine_id === keepId) : [];
+
+  // Allow loadState to re-run on next request
+  stateLoadPromise = null;
+
+  broadcastDashboard({ type: "STATE_SYNC", state: deriveState() });
+  res.json({ ok: true, kept: keepId || "nothing" });
 });
 
 app.post("/verify-remediation", async (_req, res) => {
